@@ -6,6 +6,8 @@ import com.omnicore.emulator.core.n64.N64RomValidator
 import com.omnicore.emulator.core.ps2.PS2IsoValidator
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
+import com.omnicore.emulator.storage.Ps1MediaLayout
+import com.omnicore.emulator.storage.Ps1PlaylistMedia
 import com.omnicore.emulator.storage.SafGameSource
 import java.util.UUID
 
@@ -13,7 +15,7 @@ import java.util.UUID
  * Shared import pipeline for the OmniCore library.
  *
  * Import is system-neutral: console filters never blindly force a file to a
- * backend. N64 is signature-detected, PS1 CUE companions are grouped, PS2 ISO
+ * backend. N64 is signature-detected, PS1 CUE/CCD/M3U media is grouped, PS2 ISO
  * media is content-detected through ISO9660 SYSTEM.CNF/BOOT2, and ambiguous
  * compressed/container extensions remain explicit user choices.
  */
@@ -82,28 +84,84 @@ object LibraryImportEngine {
         val warnings = inheritedWarnings.toMutableList()
         val consumed = mutableSetOf<String>()
 
+        // M3U is one library entry for the complete multi-disc set. The runtime
+        // resolves the playlist and exposes disc switching in the PS1 Quick Menu.
+        docs.filter { it.extension == "m3u" }.forEach { playlist ->
+            val plan = Ps1PlaylistMedia.plan(context, playlist, docs).getOrElse { error ->
+                warnings += "${playlist.name}: ${error.message ?: "playlist multi-disc inválida"}"
+                consumed += playlist.uri.toString()
+                return@forEach
+            }
+            val staging = plan.stagingDocuments.distinctBy { it.uri.toString() }
+            games += GameEntry(
+                id = UUID.randomUUID().toString(),
+                title = cleanTitle(playlist.name),
+                fileName = playlist.name,
+                uri = playlist.uri.toString(),
+                system = ConsoleSystem.PLAYSTATION_1,
+                sizeBytes = staging.sumOf { it.sizeBytes },
+                folderUri = folderUri,
+                companionUris = if (folderUri == null) staging.map { it.uri.toString() } else emptyList()
+            )
+            plan.warnings.forEach { warnings += "${playlist.name}: $it" }
+            staging.forEach { consumed += it.uri.toString() }
+        }
+
         // Build PS1 CUE entries without returning early. N64/PS2 or other
         // systems in the exact same folder continue through the scanner.
-        val cues = docs.filter { it.extension == "cue" }
+        val cues = docs.filter { it.extension == "cue" && it.uri.toString() !in consumed }
         val referencedPs1Tracks = mutableSetOf<String>()
         cues.forEach { cue ->
+            val cueRefs = mutableListOf<String>()
             runCatching { SafGameSource.readCueText(context, cue.uri) }
                 .onSuccess { text ->
                     SafGameSource.cueReferences(text).forEach {
-                        referencedPs1Tracks += SafGameSource.normalizeReference(it).lowercase()
+                        val normalized = SafGameSource.normalizeReference(it)
+                        cueRefs += normalized
+                        referencedPs1Tracks += normalized.lowercase()
                     }
                 }
+                .onFailure { warnings += "${cue.name}: não consegui validar as linhas FILE agora." }
+
+            val companions = if (folderUri == null) {
+                val wanted = cueRefs.map { it.lowercase() }.toSet()
+                docs.filter { it.name.lowercase() in wanted }.map { it.uri.toString() }
+            } else {
+                emptyList()
+            }
             games += GameEntry(
                 id = UUID.randomUUID().toString(),
                 title = cleanTitle(cue.name),
                 fileName = cue.name,
                 uri = cue.uri.toString(),
                 system = ConsoleSystem.PLAYSTATION_1,
-                sizeBytes = if (folderUri != null) 0L else docs.sumOf { it.sizeBytes },
+                sizeBytes = if (folderUri != null) 0L else docs.filter { it.uri.toString() == cue.uri.toString() || it.uri.toString() in companions }.sumOf { it.sizeBytes },
                 folderUri = folderUri,
-                companionUris = if (folderUri == null) selectedUris else emptyList()
+                companionUris = companions
             )
             consumed += cue.uri.toString()
+        }
+
+        docs.filter { it.name.lowercase() in referencedPs1Tracks }.forEach {
+            consumed += it.uri.toString()
+        }
+
+        // CCD is paired only with its basename-matching IMG and optional SUB/SBI.
+        val ccdPlan = Ps1MediaLayout.plan(docs.filter { it.uri.toString() !in consumed })
+        ccdPlan.warnings.forEach(warnings::add)
+        ccdPlan.sets.filter { it.kind == Ps1MediaLayout.Kind.CCD_SET }.forEach { media ->
+            val setDocs = media.allDocuments.distinctBy { it.uri.toString() }
+            games += GameEntry(
+                id = UUID.randomUUID().toString(),
+                title = cleanTitle(media.primary.name),
+                fileName = media.primary.name,
+                uri = media.primary.uri.toString(),
+                system = ConsoleSystem.PLAYSTATION_1,
+                sizeBytes = setDocs.sumOf { it.sizeBytes },
+                folderUri = folderUri,
+                companionUris = if (folderUri == null) setDocs.map { it.uri.toString() } else emptyList()
+            )
+            setDocs.forEach { consumed += it.uri.toString() }
         }
 
         docs.forEach { doc ->
@@ -125,7 +183,7 @@ object LibraryImportEngine {
 
             // .iso is shared by several consoles. Only classify it as PS2 when
             // ISO9660 SYSTEM.CNF explicitly contains BOOT2. This keeps PS1/PSP/
-            // Wii images from being routed to Play! by extension alone.
+            // Wii images from being routed to PCSX2 by extension alone.
             if (doc.extension == "iso" && PS2IsoValidator.isPlayStation2Iso(context, doc.uri, doc.name)) {
                 games += entry(doc, ConsoleSystem.PLAYSTATION_2, folderUri = null)
                 consumed += doc.uri.toString()
@@ -136,10 +194,6 @@ object LibraryImportEngine {
             val activeCandidates = candidates.filter { it in ACTIVE_SYSTEMS }
             val explicitOnly = doc.extension in EXPLICIT_SYSTEM_EXTENSIONS
             val system = when {
-                // BIN/CHD/CSO can belong to more than one console. A PS2 filter
-                // is allowed to route a user-selected file, but the global
-                // scanner must not guess merely because another backend is not
-                // active yet.
                 preferredSystem != null && preferredSystem in candidates -> preferredSystem
                 explicitOnly -> null
                 activeCandidates.size == 1 -> activeCandidates.single()
@@ -148,8 +202,6 @@ object LibraryImportEngine {
             }
 
             if (system != null) {
-                // A loose BIN is accepted as PS1 only when there is no CUE in
-                // this import set. Multiple loose BINs remain ambiguous.
                 if (system == ConsoleSystem.PLAYSTATION_1 && doc.extension == "bin" && cues.isNotEmpty()) {
                     consumed += doc.uri.toString()
                     return@forEach
