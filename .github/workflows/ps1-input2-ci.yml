@@ -40,7 +40,7 @@ jobs:
           grep -q 'buttonPointerTargets' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
           grep -q 'dpadProjectionCache' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
 
-      - name: Guard PS1 media-layout foundation
+      - name: Guard PS1 media compatibility contracts
         shell: bash
         run: |
           set -euo pipefail
@@ -49,6 +49,19 @@ jobs:
           grep -q 'CCD_SET' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'arquivo IMG correspondente não encontrado' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'vários BIN sem CUE' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
+          grep -q '"ccd"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -q 'prepareCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'validateCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'Ps1MediaLayout.plan' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+
+      - name: Guard physical Input 2.0 path
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'physicalTankAssist' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'resolveForGame(this, gameKey)' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'beginGesture(SystemClock.uptimeMillis())' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'PHYSICAL_TANK_FRAME_MS' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
 
       - name: Compile Kotlin sources
         shell: bash
