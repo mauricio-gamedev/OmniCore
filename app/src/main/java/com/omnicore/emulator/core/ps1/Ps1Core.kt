@@ -11,6 +11,7 @@ import com.omnicore.emulator.library.RomDetector
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.settings.InputSettings
+import com.omnicore.emulator.settings.Ps1Settings
 
 class Ps1Core : EmulatorCore {
     override val info = CoreInfo(
@@ -43,8 +44,13 @@ class Ps1Core : EmulatorCore {
         }
 
         // Resolve SMART before the Activity exists so touch and physical controllers
-        // receive the same per-game policy from their very first input event.
-        val recommendation = Ps1ControlProfiles.recommend(game.title, game.fileName)
+        // receive the same per-game policy from their very first input event. Native
+        // recommendations are gated by the actual emulated pad type.
+        val recommendation = Ps1ControlProfiles.recommend(
+            title = game.title,
+            fileName = game.fileName,
+            dualShockEnabled = Ps1Settings.resolve(context).dualShock
+        )
         InputSettings.applySmartAutoProfile(context, game.id, recommendation.mode)
 
         context.startActivity(EmulationActivity.intent(context, game, extension))
