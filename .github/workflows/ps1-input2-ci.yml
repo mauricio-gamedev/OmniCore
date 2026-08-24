@@ -6,6 +6,8 @@ on:
     paths:
       - "app/src/main/java/com/omnicore/emulator/emulation/**"
       - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
+      - "app/src/main/java/com/omnicore/emulator/core/ps1/**"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt"
       - ".github/workflows/ps1-input2-ci.yml"
   workflow_dispatch:
 
@@ -37,6 +39,16 @@ jobs:
           grep -q 'clearGameAnalogMode' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
           grep -q 'buttonPointerTargets' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
           grep -q 'dpadProjectionCache' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+
+      - name: Guard PS1 media-layout foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
+          grep -q 'CUE_SET' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
+          grep -q 'CCD_SET' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
+          grep -q 'arquivo IMG correspondente não encontrado' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
+          grep -q 'vários BIN sem CUE' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
 
       - name: Compile Kotlin sources
         shell: bash
