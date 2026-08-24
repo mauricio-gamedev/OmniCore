@@ -68,6 +68,7 @@ import com.omnicore.emulator.settings.InputSettings
 import com.omnicore.emulator.settings.Ps1Settings
 import com.omnicore.emulator.storage.GameLibraryStore
 import com.omnicore.emulator.storage.Ps1Files
+import com.omnicore.emulator.storage.Ps1MediaLayout
 import com.omnicore.emulator.storage.SafGameSource
 import com.omnicore.emulator.update.UpdateManager
 import java.util.UUID
@@ -114,6 +115,50 @@ fun OmniCoreV3App() {
         message = success
     }
 
+    fun ps1Entries(plan: Ps1MediaLayout.Plan, folderUri: String? = null): List<GameEntry> =
+        plan.sets.map { media ->
+            val documents = media.allDocuments
+            GameEntry(
+                id = UUID.randomUUID().toString(),
+                title = media.primary.name.substringBeforeLast('.', media.primary.name),
+                fileName = media.primary.name,
+                uri = media.primary.uri.toString(),
+                system = ConsoleSystem.PLAYSTATION_1,
+                sizeBytes = documents.sumOf { it.sizeBytes },
+                folderUri = folderUri,
+                companionUris = if (folderUri == null && media.kind != Ps1MediaLayout.Kind.SINGLE) {
+                    documents.map { it.uri.toString() }
+                } else {
+                    emptyList()
+                }
+            )
+        }
+
+    fun importPs1Plan(plan: Ps1MediaLayout.Plan, folderUri: String? = null, sourceLabel: String): Boolean {
+        val ambiguousBins = plan.warnings.firstOrNull { it.contains("vários BIN sem CUE", ignoreCase = true) }
+        if (ambiguousBins != null) {
+            message = ambiguousBins
+            return true
+        }
+        val additions = ps1Entries(plan, folderUri)
+        if (additions.isEmpty()) {
+            message = plan.warnings.firstOrNull() ?: "Nenhuma mídia PS1 compatível foi reconhecida."
+            return true
+        }
+        val descriptorCount = plan.sets.count { it.kind != Ps1MediaLayout.Kind.SINGLE }
+        val warning = plan.warnings.takeIf { it.isNotEmpty() }?.joinToString(" ")
+        val details = if (descriptorCount > 0) {
+            "$descriptorCount conjunto(s) CUE/CCD mantidos com suas faixas."
+        } else {
+            "${additions.size} imagem(ns) PS1 reconhecida(s)."
+        }
+        persist(additions, buildString {
+            append(sourceLabel).append(": ").append(details)
+            if (!warning.isNullOrBlank()) append(" Aviso: ").append(warning)
+        })
+        return true
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         uris.forEach { uri ->
@@ -122,23 +167,9 @@ fun OmniCoreV3App() {
             }
         }
         val docs = uris.map { SafGameSource.metadata(context, it) }
-        val cues = docs.filter { it.extension == "cue" }
-        if (cues.isNotEmpty()) {
-            val companions = docs.map { it.uri.toString() }
-            persist(
-                cues.map { cue ->
-                    GameEntry(
-                        id = UUID.randomUUID().toString(),
-                        title = cue.name.substringBeforeLast('.', cue.name),
-                        fileName = cue.name,
-                        uri = cue.uri.toString(),
-                        system = ConsoleSystem.PLAYSTATION_1,
-                        sizeBytes = docs.sumOf { it.sizeBytes },
-                        companionUris = companions
-                    )
-                },
-                "CUE/BIN adicionado. As faixas serão validadas antes do boot."
-            )
+        val hasPs1Descriptor = docs.any { it.extension in Ps1Core.DESCRIPTOR_EXTENSIONS }
+        if (filter == ConsoleSystem.PLAYSTATION_1 || hasPs1Descriptor) {
+            importPs1Plan(Ps1MediaLayout.plan(docs), sourceLabel = "Seleção PS1")
             return@rememberLauncherForActivityResult
         }
 
@@ -170,47 +201,10 @@ fun OmniCoreV3App() {
             message = it.message ?: "Não consegui ler a pasta selecionada."
             return@rememberLauncherForActivityResult
         }
-        val cues = docs.filter { it.extension == "cue" }
-        if (cues.isNotEmpty()) {
-            persist(
-                cues.map { cue ->
-                    GameEntry(
-                        id = UUID.randomUUID().toString(),
-                        title = cue.name.substringBeforeLast('.', cue.name),
-                        fileName = cue.name,
-                        uri = cue.uri.toString(),
-                        system = ConsoleSystem.PLAYSTATION_1,
-                        sizeBytes = docs.sumOf { it.sizeBytes },
-                        folderUri = treeUri.toString()
-                    )
-                },
-                "Pasta PS1 vinculada com ${cues.size} CUE."
-            )
-            return@rememberLauncherForActivityResult
-        }
-
-        val singles = docs.filter { it.extension in Ps1Core.SINGLE_FILE_EXTENSIONS }
-        if (singles.count { it.extension == "bin" } > 1) {
-            message = "A pasta contém vários BIN sem CUE. O CUE é necessário para mapear a ordem das faixas."
-            return@rememberLauncherForActivityResult
-        }
-        if (singles.isEmpty()) {
-            message = "Não encontrei CUE, CHD, PBP ou outra imagem PS1 compatível na raiz dessa pasta."
-            return@rememberLauncherForActivityResult
-        }
-        persist(
-            singles.map { doc ->
-                GameEntry(
-                    id = UUID.randomUUID().toString(),
-                    title = doc.name.substringBeforeLast('.', doc.name),
-                    fileName = doc.name,
-                    uri = doc.uri.toString(),
-                    system = ConsoleSystem.PLAYSTATION_1,
-                    sizeBytes = doc.sizeBytes,
-                    folderUri = treeUri.toString()
-                )
-            },
-            "${singles.size} jogo(s) PS1 vinculado(s)."
+        importPs1Plan(
+            plan = Ps1MediaLayout.plan(docs),
+            folderUri = treeUri.toString(),
+            sourceLabel = "Pasta PS1"
         )
     }
 
@@ -304,7 +298,7 @@ fun OmniCoreV3App() {
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
-                            "Para PS1 em CUE/BIN, escolha a pasta inteira. O OmniCore valida as faixas e mantém o conjunto unido.",
+                            "Para PS1 em CUE/BIN ou CCD/IMG/SUB, escolha a pasta inteira ou selecione o conjunto completo. O OmniCore mantém descritor e faixas unidos.",
                             color = HubSoft
                         )
                         Button(
@@ -510,7 +504,7 @@ private fun EngineHero(ps1Ready: Boolean?) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("PLAYSTATION ENGINE", color = HubCyan, fontWeight = FontWeight.Black, style = MaterialTheme.typography.labelMedium)
                 Text("PCSX-ReARMed", fontWeight = FontWeight.Black, style = MaterialTheme.typography.headlineSmall)
-                Text("CUE/BIN • CHD • PBP • EGL/GLES • A/V desacoplado", color = HubSoft, style = MaterialTheme.typography.bodySmall)
+                Text("CUE/BIN • CCD/IMG/SUB • CHD • PBP • EGL/GLES", color = HubSoft, style = MaterialTheme.typography.bodySmall)
             }
             AssistChip(onClick = {}, label = {
                 Text(when (ps1Ready) { true -> "ONLINE"; false -> "OFFLINE"; null -> "VERIFICANDO" })
