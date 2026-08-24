@@ -2,6 +2,7 @@ package com.omnicore.emulator.storage
 
 import android.content.Context
 import android.net.Uri
+import java.io.ByteArrayOutputStream
 
 /**
  * Resolves an M3U playlist against Android SAF documents without changing the
@@ -86,9 +87,17 @@ object Ps1PlaylistMedia {
     fun readText(context: Context, uri: Uri): String =
         context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "O Android não forneceu acesso à playlist." }
-            val bytes = input.readBytes(MAX_PLAYLIST_BYTES + 1)
-            require(bytes.size <= MAX_PLAYLIST_BYTES) { "A playlist M3U é grande demais para ser válida." }
-            bytes.toString(Charsets.UTF_8).removePrefix("\uFEFF")
+            val out = ByteArrayOutputStream(4096)
+            val buffer = ByteArray(4096)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                require(total <= MAX_PLAYLIST_BYTES) { "A playlist M3U é grande demais para ser válida." }
+                out.write(buffer, 0, count)
+            }
+            out.toByteArray().toString(Charsets.UTF_8).removePrefix("\uFEFF")
         }
 
     private fun stem(name: String): String = name.substringBeforeLast('.', name)
