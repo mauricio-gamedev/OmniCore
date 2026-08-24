@@ -8,6 +8,7 @@ on:
       - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
       - "app/src/main/java/com/omnicore/emulator/core/ps1/**"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt"
+      - "app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt"
       - ".github/workflows/ps1-input2-ci.yml"
   workflow_dispatch:
 
@@ -49,10 +50,13 @@ jobs:
           grep -q 'CCD_SET' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'arquivo IMG correspondente não encontrado' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'vários BIN sem CUE' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
-          grep -q '"ccd"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -q 'DESCRIPTOR_EXTENSIONS' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
           grep -q 'prepareCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
           grep -q 'validateCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
           grep -q 'Ps1MediaLayout.plan' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'importPs1Plan' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
+          grep -q 'Ps1MediaLayout.plan(docs)' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
+          grep -q 'CCD/IMG/SUB' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
 
       - name: Guard physical Input 2.0 path
         shell: bash
