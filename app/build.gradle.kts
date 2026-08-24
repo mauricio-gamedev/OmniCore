@@ -15,7 +15,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = 47
-        versionName = "0.11.5-recovery1"
+        versionName = "0.11.6-ps1-input2"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
