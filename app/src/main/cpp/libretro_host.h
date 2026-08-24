@@ -39,6 +39,7 @@ public:
     bool running() const;
     void setButton(unsigned id, bool pressed);
     void setAnalog(unsigned stick, std::int16_t x, std::int16_t y);
+    bool setModernTankIntent(std::int16_t x, std::int16_t y, bool active);
     void requestSaveState(int slot);
     void requestLoadState(int slot);
     void requestCheatReset();
