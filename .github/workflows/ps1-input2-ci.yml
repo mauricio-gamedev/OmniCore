@@ -4,13 +4,16 @@ on:
   push:
     branches: [ "agent/ps1-input2-compat" ]
     paths:
+      - "app/src/main/cpp/**"
       - "app/src/main/java/com/omnicore/emulator/emulation/**"
       - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
+      - "app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt"
       - "app/src/main/java/com/omnicore/emulator/core/ps1/**"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaPreflight.kt"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt"
       - "app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt"
+      - "tools/patch_ps1_ui_disk.py"
       - ".github/workflows/ps1-input2-ci.yml"
   workflow_dispatch:
 
@@ -87,6 +90,37 @@ jobs:
           grep -q 'groupByDiscNumber' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
           grep -q 'not wired as a launchable format yet' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
           ! grep -q '"m3u"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+
+      - name: Guard native libretro disk-control bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'struct retro_disk_control_callback' app/src/main/cpp/libretro_abi.h
+          grep -q 'struct retro_disk_control_ext_callback' app/src/main/cpp/libretro_abi.h
+          grep -q 'requestDiskIndex' app/src/main/cpp/libretro_host.h
+          grep -q 'nativeSetDiskIndex' app/src/main/cpp/native_bridge.cpp
+          grep -q 'nativeDiskCount' app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt
+          grep -q 'fun diskState()' app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt
+          grep -q 'ps1_disk_control_patch.cmake' app/src/main/cpp/CMakeLists.txt
+          cmake \
+            -DOMNICORE_DISK_HOST_INPUT="$PWD/app/src/main/cpp/libretro_host_v7.cpp" \
+            -DOMNICORE_DISK_HOST_OUTPUT="$RUNNER_TEMP/libretro_host_disk.cpp" \
+            -P app/src/main/cpp/ps1_disk_control_patch.cmake
+          grep -q 'applyPendingDiskRequest' "$RUNNER_TEMP/libretro_host_disk.cpp"
+          grep -q 'RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE' "$RUNNER_TEMP/libretro_host_disk.cpp"
+          grep -q 'diskControlAvailable_' "$RUNNER_TEMP/libretro_host_disk.cpp"
+
+      - name: Guard Quick Menu disk-control UI when applied
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -q 'showDiskDialog' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt; then
+            grep -q '"DISCO"' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+            grep -q 'NativeBridge.diskState()' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+            grep -q 'NativeBridge.setDiskIndex' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          else
+            test -f tools/patch_ps1_ui_disk.py
+          fi
 
       - name: Guard physical Input 2.0 path
         shell: bash
