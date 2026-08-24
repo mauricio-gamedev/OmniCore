@@ -374,7 +374,7 @@ class GamepadOverlayView(context: Context) : View(context) {
         val panel = quickMenuPanelRect()
         chromePaint.alpha = 238
         canvas.drawRoundRect(panel, min(width, height) * 0.025f, min(width, height) * 0.025f, chromePaint)
-        val labels = arrayOf("SALVAR", "CARREGAR", "STATUS", "EDITAR", "VISUAL", "LAYOUT", "CHEATS", "SAIR")
+        val labels = arrayOf("SALVAR", "CARREGAR", "STATUS", "EDITAR", "VISUAL", "LAYOUT", "CHEATS", "DISCO", "SAIR")
         textPaint.textSize = min(width, height) * 0.018f
         labels.forEachIndexed { index, label ->
             val rect = quickMenuItemRect(index)
@@ -421,7 +421,7 @@ class GamepadOverlayView(context: Context) : View(context) {
     private fun quickMenuPanelRect(): RectF {
         val base = min(width, height).toFloat().coerceAtLeast(1f)
         val panelW = base * 0.50f
-        val panelH = base * 0.39f
+        val panelH = base * 0.47f
         val right = width - base * 0.018f
         val top = base * 0.09f
         return RectF(right - panelW, top, right, top + panelH)
@@ -432,9 +432,9 @@ class GamepadOverlayView(context: Context) : View(context) {
         val base = min(width, height).toFloat().coerceAtLeast(1f)
         val gap = base * 0.012f
         val footer = base * 0.045f
-        val contentH = panel.height() - footer - gap * 5
+        val contentH = panel.height() - footer - gap * 6
         val itemW = (panel.width() - gap * 3) / 2f
-        val itemH = contentH / 4f
+        val itemH = contentH / 5f
         val column = index % 2
         val row = index / 2
         val left = panel.left + gap + column * (itemW + gap)
@@ -566,7 +566,7 @@ class GamepadOverlayView(context: Context) : View(context) {
             return true
         }
         if (!menuVisible) return false
-        val item = (0..7).firstOrNull { quickMenuItemRect(it).contains(x, y) }
+        val item = (0..8).firstOrNull { quickMenuItemRect(it).contains(x, y) }
         if (item == null) {
             menuVisible = false
             scheduleRedraw()
@@ -587,7 +587,8 @@ class GamepadOverlayView(context: Context) : View(context) {
             4 -> showVisualDialog()
             5 -> showLayoutDialog()
             6 -> showCheatDialog()
-            7 -> activity?.finish()
+            7 -> showDiskDialog()
+            8 -> activity?.finish()
         }
         scheduleRedraw()
     }
@@ -695,9 +696,15 @@ class GamepadOverlayView(context: Context) : View(context) {
 
     private fun showStatusDialog() {
         val enabled = CheatStore.load(context, gameKey).count { it.enabled }
+        val disk = NativeBridge.diskState()
+        val diskLabel = when {
+            disk.count > 1 -> "${disk.index + 1}/${disk.count}${if (disk.ejected) " • tampa aberta" else ""}"
+            disk.count == 1 -> "1/1"
+            else -> "indisponível"
+        }
         AlertDialog.Builder(context)
             .setTitle(gameTitle)
-            .setMessage("${NativeBridge.lastMessage()}\n\nPreset: ${config.overlayPreset.label}\nControle: ${config.analogMode.label}\nCheats ativos: $enabled")
+            .setMessage("${NativeBridge.lastMessage()}\n\nPreset: ${config.overlayPreset.label}\nControle: ${config.analogMode.label}\nDisco: $diskLabel\nCheats ativos: $enabled")
             .setNeutralButton("Controle") { _, _ -> showControlDialog() }
             .setPositiveButton("OK", null)
             .show()
@@ -787,6 +794,54 @@ class GamepadOverlayView(context: Context) : View(context) {
                 rebuildLayout(width, height)
                 dialog.dismiss()
                 showToast("Layout ${preset.label} aplicado a este jogo")
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showDiskDialog() {
+        val state = NativeBridge.diskState()
+        if (state.count <= 0) {
+            showToast("O core não expôs controle de disco para esta sessão")
+            return
+        }
+        if (state.count == 1) {
+            AlertDialog.Builder(context)
+                .setTitle("Disco • $gameTitle")
+                .setMessage("Esta sessão possui apenas um disco. Em jogos multi-disc, o OmniCore mostrará todos os discos aqui sem reiniciar o jogo.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val labels = Array(state.count) { index ->
+            buildString {
+                append("Disco ").append(index + 1)
+                if (index == state.index) append(" • inserido")
+            }
+        }
+        AlertDialog.Builder(context)
+            .setTitle("Trocar disco • $gameTitle")
+            .setSingleChoiceItems(labels, state.index) { dialog, which ->
+                if (which == state.index) {
+                    dialog.dismiss()
+                    showToast("O disco ${which + 1} já está inserido")
+                    return@setSingleChoiceItems
+                }
+                if (NativeBridge.setDiskIndex(which)) {
+                    dialog.dismiss()
+                    showToast("Trocando para o disco ${which + 1}…")
+                    postDelayed({
+                        val updated = NativeBridge.diskState()
+                        if (updated.index == which) {
+                            showToast("Disco ${which + 1}/${updated.count} inserido")
+                        } else {
+                            showToast(NativeBridge.lastMessage())
+                        }
+                    }, 450L)
+                } else {
+                    showToast("A troca de disco não está disponível agora")
+                }
             }
             .setNegativeButton("Cancelar", null)
             .show()
