@@ -1,0 +1,248 @@
+name: PS1 Modern Control Engine v2 R4 Full APK
+
+on:
+  push:
+    branches: [ "agent/recovery-0.11.5-full" ]
+    paths:
+      - ".github/workflows/ps1-input2-r4-full.yml"
+      - "app/build.gradle.kts"
+      - "app/src/main/cpp/CMakeLists.txt"
+      - "app/src/main/cpp/libretro_host.h"
+      - "app/src/main/cpp/native_bridge.cpp"
+      - "app/src/main/cpp/ps1_disk_control_patch.cmake"
+      - "app/src/main/cpp/ps1_modern_control_patch.cmake"
+      - "app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt"
+      - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt"
+      - "app/src/main/java/com/omnicore/emulator/core/ps1/**"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1*.kt"
+      - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omnicore-alpha6-ps1-modern-r4
+  cancel-in-progress: true
+
+jobs:
+  build-r4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout Alpha 6 plus PS1 R4
+        uses: actions/checkout@v4
+        with:
+          ref: agent/recovery-0.11.5-full
+          fetch-depth: 0
+
+      - name: Verify Alpha 6 remains intact and R4 is isolated
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 50' app/build.gradle.kts
+          grep -Fq 'versionName = "0.11.6-ps1-input2-r4"' app/build.gradle.kts
+
+          # Alpha 6 protected app surfaces/backends.
+          test -f app/src/main/java/com/omnicore/emulator/achievements/OmniAchievements.kt
+          test -f app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
+          grep -Fq 'AchievementsScreen()' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
+          test -d app/src/main/java/com/omnicore/emulator/core/n64
+          test -d app/src/main/java/com/omnicore/emulator/core/ps2
+          grep -Fq 'class Pcsx2PS2Backend' app/src/main/java/com/omnicore/emulator/core/ps2/Pcsx2PS2Backend.kt
+          grep -Fq '7f0ae7a6c689b5b36eccc61b7adb480f65c7a3a3' config/ps2-pcsx2-pin.txt
+
+          # Existing PS1 Input 2.0/Compatibility 2.0 contract.
+          grep -Fq 'TANK_ASSIST' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'KEY_MANUAL_ANALOG' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'applySmartAutoProfile' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'Ps1MediaPreflight.validate' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -Fq 'NativeBridge.setDiskIndex' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          test -f app/src/main/cpp/ps1_disk_control_patch.cmake
+
+          # R4 is a generated PS1-only layer after disk control; v7 is still the source baseline.
+          test -f app/src/main/cpp/ps1_modern_control_patch.cmake
+          grep -Fq 'OMNICORE_MODERN_HOST_INPUT "${OMNICORE_DISK_HOST_OUTPUT}"' app/src/main/cpp/CMakeLists.txt
+          grep -Fq 'ps1_modern_control_patch.cmake' app/src/main/cpp/CMakeLists.txt
+          grep -Fq 'modernTurnAccumulator_' app/src/main/cpp/ps1_modern_control_patch.cmake
+          grep -Fq 'applyModernTankFrame();' app/src/main/cpp/ps1_modern_control_patch.cmake
+          grep -Fq 'api.run();' app/src/main/cpp/ps1_modern_control_patch.cmake
+          grep -Fq 'setModernTankIntent' app/src/main/cpp/libretro_host.h
+          grep -Fq 'nativeSetModernTankIntent' app/src/main/cpp/native_bridge.cpp
+          grep -Fq 'nativeSetModernTankIntent' app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt
+          grep -Fq 'NativeBridge.setModernTankIntent' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
+          grep -Fq 'R3 fallback' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
+          echo 'ALPHA6_PS1_MODERN_R4_SOURCE_OK'
+
+      - name: Prepare Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          if ! test -d "$NDK"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
+          fi
+          if ! test -d "$ANDROID_SDK_ROOT/platforms/android-36"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36'
+          fi
+          if ! test -d "$ANDROID_SDK_ROOT/build-tools/36.0.0"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0'
+          fi
+          echo "OMNI_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Prepare stable DEV signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/signing
+          base64 -d config/omnicore-dev.keystore.b64 > build/signing/omnicore-dev.jks
+          chmod 600 build/signing/omnicore-dev.jks
+          echo "OMNICORE_DEV_KEYSTORE=$GITHUB_WORKSPACE/build/signing/omnicore-dev.jks" >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_STORE_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_ALIAS=omnicore-dev' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+
+      - name: Reuse validated Alpha 6 third-party native payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_DIR="$GITHUB_WORKSPACE/build/alpha6-base"
+          UNPACK="$BASE_DIR/unpack"
+          mkdir -p "$BASE_DIR" "$UNPACK"
+          gh release download v0.11.5-ps2-alpha6 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'OmniCore-v0.11.5-ps2-alpha6.apk' \
+            --dir "$BASE_DIR"
+          BASE_APK="$BASE_DIR/OmniCore-v0.11.5-ps2-alpha6.apk"
+          test -s "$BASE_APK"
+
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
+          "$AAPT" dump badging "$BASE_APK" | tee "$BASE_DIR/base-badging.txt"
+          grep -q "package: name='com.omnicore.emulator' versionCode='45' versionName='0.11.5'" "$BASE_DIR/base-badging.txt"
+          "$APKSIGNER" verify --print-certs "$BASE_APK" > "$BASE_DIR/base-cert.txt"
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$BASE_DIR/base-cert.txt" | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED"
+
+          unzip -q "$BASE_APK" \
+            'lib/arm64-v8a/libpcsx_rearmed_libretro.so' \
+            'lib/armeabi-v7a/libpcsx_rearmed_libretro.so' \
+            'lib/arm64-v8a/libmupen64plus_next_libretro.so' \
+            'lib/armeabi-v7a/libmupen64plus_next_libretro.so' \
+            'lib/arm64-v8a/libemucore_4k.so' \
+            'lib/arm64-v8a/libemucore_16k.so' \
+            'assets/pcsx2/*' \
+            'assets/licenses/GPL-3.0-PCSX2-ARMSX2.txt' \
+            -d "$UNPACK"
+
+          mkdir -p app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/armeabi-v7a
+          cp "$UNPACK/lib/arm64-v8a/libpcsx_rearmed_libretro.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/armeabi-v7a/libpcsx_rearmed_libretro.so" app/src/main/jniLibs/armeabi-v7a/
+          cp "$UNPACK/lib/arm64-v8a/libmupen64plus_next_libretro.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/armeabi-v7a/libmupen64plus_next_libretro.so" app/src/main/jniLibs/armeabi-v7a/
+          cp "$UNPACK/lib/arm64-v8a/libemucore_4k.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/arm64-v8a/libemucore_16k.so" app/src/main/jniLibs/arm64-v8a/
+
+          mkdir -p app/src/main/assets app/src/main/assets/licenses
+          rm -rf app/src/main/assets/pcsx2
+          cp -a "$UNPACK/assets/pcsx2" app/src/main/assets/
+          cp "$UNPACK/assets/licenses/GPL-3.0-PCSX2-ARMSX2.txt" app/src/main/assets/licenses/
+          test -n "$(find app/src/main/assets/pcsx2/resources -type f -print -quit)"
+          echo 'ALPHA6_NATIVE_PAYLOAD_REUSED_OK'
+
+      - name: Build signed R4 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_NDK_HOME="$OMNI_NDK_HOME"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+          test -s app/build/outputs/apk/release/app-release.apk
+
+      - name: Verify R4 identity, signer, payload and 16 KB installability
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          READELF="$OMNI_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
+
+          unzip -tqq "$APK"
+          "$AAPT" dump badging "$APK" | tee build/r4-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='50' versionName='0.11.6-ps1-input2-r4'" build/r4-badging.txt
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/r4-cert.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/r4-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED"
+
+          CHECK=build/r4-apk-unpack
+          rm -rf "$CHECK" && mkdir -p "$CHECK"
+          unzip -q "$APK" -d "$CHECK"
+          test -f "$CHECK/lib/arm64-v8a/libomnicore_runtime.so"
+          test -f "$CHECK/lib/arm64-v8a/libpcsx_rearmed_libretro.so"
+          test -f "$CHECK/lib/arm64-v8a/libmupen64plus_next_libretro.so"
+          test -f "$CHECK/lib/arm64-v8a/libemucore_4k.so"
+          test -f "$CHECK/lib/arm64-v8a/libemucore_16k.so"
+          test -n "$(find "$CHECK/assets/pcsx2/resources" -type f -print -quit)"
+
+          while IFS= read -r -d '' SO; do
+            FOUND=0
+            while IFS= read -r LOAD; do
+              FOUND=1
+              A="$(awk '{print $NF}' <<< "$LOAD")"
+              [[ "$A" =~ ^0x[0-9A-Fa-f]+$ ]] || exit 1
+              (( A >= 0x4000 )) || { echo "ELF below 16KB alignment: $SO :: $LOAD" >&2; exit 1; }
+            done < <("$READELF" -lW "$SO" | grep -E '^[[:space:]]*LOAD[[:space:]]')
+            (( FOUND == 1 )) || { echo "No LOAD segments: $SO" >&2; exit 1; }
+          done < <(find "$CHECK/lib" -type f -name '*.so' -print0)
+          "$ZIPALIGN" -v -c -P 16 4 "$APK"
+          echo 'R4_APK_VALIDATED_OK'
+
+      - name: Package R4 artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/r4
+          OUT=build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.apk
+          cp app/build/outputs/apk/release/app-release.apk "$OUT"
+          sha256sum "$OUT" > build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.sha256
+
+      - name: Upload R4 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniCore-v0.11.6-ps1-input2-r4-alpha6-full
+          path: |
+            build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.apk
+            build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.sha256
+            build/r4-badging.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish R4 prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.11.6-ps1-input2-r4
+          TITLE='OmniCore v0.11.6 — PS1 Modern Control Engine v2 R4'
+          APK=build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.apk
+          HASH=build/r4/OmniCore-v0.11.6-ps1-input2-r4-alpha6-full.sha256
+          NOTES='Built on the complete Alpha 6 app without changing Achievements, N64 or PS2. R4 layers a PS1-only generated Modern Control Engine v2 after the existing disk-control host. Analog intent is filtered and turn strength is sigma-delta distributed once per emulated retro_run frame instead of Android milliseconds. The Kotlin R3 steering remains an automatic fallback if the native path is unavailable. No game-memory reads, core-speed changes, frame skipping or timing hacks are used. VersionCode 50 updates directly over R3.'
+          TARGET="$(git rev-parse HEAD)"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+          gh release upload "$TAG" "$APK" "$HASH" build/r4-badging.txt --repo "$GITHUB_REPOSITORY" --clobber
