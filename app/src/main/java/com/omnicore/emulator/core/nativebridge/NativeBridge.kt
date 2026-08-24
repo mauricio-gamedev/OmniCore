@@ -7,6 +7,14 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 object NativeBridge {
+    data class DiskState(
+        val count: Int,
+        val index: Int,
+        val ejected: Boolean
+    ) {
+        val available: Boolean get() = count > 1
+    }
+
     private val loaded: Boolean = runCatching {
         System.loadLibrary("omnicore_runtime")
         true
@@ -123,6 +131,20 @@ object NativeBridge {
         runCatching { nativeSetCheat(index.coerceIn(0, 127), enabled, code.take(8192)) }
     }
 
+    fun diskState(): DiskState {
+        if (!loaded || !isRunning()) return DiskState(0, 0, false)
+        return runCatching {
+            val count = nativeDiskCount().coerceAtLeast(0)
+            val index = nativeDiskIndex().coerceIn(0, (count - 1).coerceAtLeast(0))
+            DiskState(count = count, index = index, ejected = nativeDiskEjected())
+        }.getOrDefault(DiskState(0, 0, false))
+    }
+
+    fun setDiskIndex(index: Int): Boolean {
+        if (!loaded || index < 0) return false
+        return runCatching { nativeSetDiskIndex(index) }.getOrDefault(false)
+    }
+
     private fun warmStateFile(file: File) {
         if (!file.isFile || file.length() <= 0L) return
         runCatching {
@@ -188,5 +210,9 @@ object NativeBridge {
     private external fun nativeLoadState(slot: Int)
     private external fun nativeResetCheats()
     private external fun nativeSetCheat(index: Int, enabled: Boolean, code: String)
+    private external fun nativeDiskCount(): Int
+    private external fun nativeDiskIndex(): Int
+    private external fun nativeDiskEjected(): Boolean
+    private external fun nativeSetDiskIndex(index: Int): Boolean
     private external fun nativeLastMessage(): String
 }
