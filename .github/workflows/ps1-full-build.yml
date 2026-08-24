@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ps1-full-build-${{ github.ref }}
@@ -22,6 +22,8 @@ concurrency:
 jobs:
   build-apk:
     runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,3 +109,22 @@ jobs:
             build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish validated test release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="ps1-input2-compat-test"
+          TITLE="OmniCore PS1 Input 2.0 + Compatibility 2.0 Test"
+          NOTES="Validated full APK build from agent/ps1-input2-compat. Version code is intentionally newer than v0.9.4 so Android recognizes this package as an in-place update when the existing install uses the same stable OmniCore DEV signing certificate. Includes PS1 Input 2.0, Smart Auto profiles, modern tank-control assist, Compatibility 2.0 media validation, CUE/CCD, M3U multi-disc and in-game disk control."
+          APK="build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.apk"
+          HASH="build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.sha256"
+          TARGET="$(git rev-parse HEAD)"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+
+          gh release upload "$TAG" "$APK" "$HASH" --repo "$GITHUB_REPOSITORY" --clobber
