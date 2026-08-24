@@ -4,9 +4,10 @@ import android.content.Context
 
 object InputSettings {
     enum class AnalogMode(val storage: String, val label: String, val subtitle: String) {
-        SMART("smart", "Inteligente", "Analógico nativo + D-pad para jogos antigos"),
+        SMART("smart", "Inteligente", "Auto por jogo; desconhecidos mantêm o híbrido analógico + D-pad"),
         NATIVE("native", "Nativo", "Envia somente eixos analógicos DualShock"),
-        DPAD("dpad", "D-pad", "Stick touch funciona como direcional digital")
+        DPAD("dpad", "D-pad", "Stick touch funciona como direcional digital"),
+        TANK_ASSIST("tank_assist", "Movimento moderno", "Stick vira intenção de direção para jogos com controle tank")
     }
 
     enum class OverlayPreset(val storage: String, val label: String, val subtitle: String) {
@@ -38,6 +39,7 @@ object InputSettings {
 
     private const val PREFS = "input_settings"
     private const val KEY_ANALOG_MODE = "analog_mode"
+    private const val KEY_AUTO_ANALOG = "auto_analog_profile"
     private const val KEY_TOUCH_OPACITY = "touch_opacity"
     private const val KEY_TOUCH_SCALE = "touch_scale"
     private const val KEY_HAPTICS = "haptics"
@@ -134,7 +136,59 @@ object InputSettings {
         editor.apply()
     }
 
+    /**
+     * Applies a high-confidence SMART recommendation without taking ownership away
+     * from the user. Manual per-game modes always win. Auto-owned entries are marked
+     * so a later database update can safely refresh or remove only our own choice.
+     */
+    fun applySmartAutoProfile(context: Context, gameKey: String, recommendation: AnalogMode) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefix = gamePrefix(gameKey)
+        val modeKey = prefix + KEY_ANALOG_MODE
+        val autoKey = prefix + KEY_AUTO_ANALOG
+        val globalMode = resolve(context).analogMode
+        val hasMode = prefs.contains(modeKey)
+        val storedMode = AnalogMode.entries.firstOrNull { it.storage == prefs.getString(modeKey, null) }
+        val autoOwned = prefs.getBoolean(autoKey, false)
+
+        // If the user leaves SMART globally, previously auto-owned entries must stop
+        // overriding that new global choice. Manual per-game entries remain untouched.
+        if (globalMode != AnalogMode.SMART && autoOwned) {
+            prefs.edit().remove(modeKey).remove(autoKey).apply()
+            return
+        }
+
+        val eligible = autoOwned || !hasMode || storedMode == AnalogMode.SMART
+        if (!eligible) return
+
+        if (recommendation == AnalogMode.SMART) {
+            if (autoOwned) prefs.edit().remove(modeKey).remove(autoKey).apply()
+            return
+        }
+
+        if (globalMode == AnalogMode.SMART || storedMode == AnalogMode.SMART || autoOwned) {
+            prefs.edit()
+                .putString(modeKey, recommendation.storage)
+                .putBoolean(autoKey, true)
+                .apply()
+        }
+    }
+
     fun saveAnalogMode(context: Context, mode: AnalogMode) { edit(context).putString(KEY_ANALOG_MODE, mode.storage).apply() }
+    fun saveGameAnalogMode(context: Context, gameKey: String, mode: AnalogMode) {
+        val prefix = gamePrefix(gameKey)
+        edit(context)
+            .putString(prefix + KEY_ANALOG_MODE, mode.storage)
+            .remove(prefix + KEY_AUTO_ANALOG)
+            .apply()
+    }
+    fun clearGameAnalogMode(context: Context, gameKey: String) {
+        val prefix = gamePrefix(gameKey)
+        edit(context)
+            .remove(prefix + KEY_ANALOG_MODE)
+            .remove(prefix + KEY_AUTO_ANALOG)
+            .apply()
+    }
     fun saveTouchOpacity(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_OPACITY, value.coerceIn(0.35f, 1f)).apply() }
     fun saveTouchScale(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_SCALE, value.coerceIn(0.80f, 1.20f)).apply() }
     fun saveHaptics(context: Context, enabled: Boolean) { edit(context).putBoolean(KEY_HAPTICS, enabled).apply() }

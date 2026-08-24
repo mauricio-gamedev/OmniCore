@@ -37,6 +37,30 @@ struct retro_game_info {
     std::size_t size;
     const char* meta;
 };
+
+struct retro_disk_control_callback {
+    bool (*set_eject_state)(bool ejected);
+    bool (*get_eject_state)(void);
+    unsigned (*get_image_index)(void);
+    bool (*set_image_index)(unsigned index);
+    unsigned (*get_num_images)(void);
+    bool (*replace_image_index)(unsigned index, const retro_game_info* info);
+    bool (*add_image_index)(void);
+};
+
+struct retro_disk_control_ext_callback {
+    bool (*set_eject_state)(bool ejected);
+    bool (*get_eject_state)(void);
+    unsigned (*get_image_index)(void);
+    bool (*set_image_index)(unsigned index);
+    unsigned (*get_num_images)(void);
+    bool (*replace_image_index)(unsigned index, const retro_game_info* info);
+    bool (*add_image_index)(void);
+    bool (*set_initial_image)(unsigned index, const char* path);
+    bool (*get_image_path)(unsigned index, char* path, std::size_t len);
+    bool (*get_image_label)(unsigned index, char* label, std::size_t len);
+};
+
 struct retro_system_info {
     const char* library_name;
     const char* library_version;

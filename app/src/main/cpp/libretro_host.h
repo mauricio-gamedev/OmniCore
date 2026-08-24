@@ -43,6 +43,10 @@ public:
     void requestLoadState(int slot);
     void requestCheatReset();
     void requestCheatSet(unsigned index, bool enabled, std::string code);
+    int diskCount() const;
+    int diskIndex() const;
+    bool diskEjected() const;
+    bool requestDiskIndex(int index);
     void updatePerformanceConfig(RuntimePerformanceConfig performance);
     std::string status() const;
 
