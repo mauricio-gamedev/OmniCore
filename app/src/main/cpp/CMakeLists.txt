@@ -3,7 +3,7 @@ project(omnicore_runtime LANGUAGES CXX)
 
 # PlayStation runtime. Keep PS1 sources and lifecycle isolated from other consoles.
 # Layer generated patches instead of editing the validated Alpha 6 host directly:
-# v7 baseline -> disk control -> Modern Control Engine v2.
+# v7 baseline -> disk control -> Modern Control Engine v2.1 -> Adaptive Arc R6.
 set(OMNICORE_DISK_HOST_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/libretro_host_v7.cpp")
 set(OMNICORE_DISK_HOST_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/libretro_host_disk.cpp")
 include("${CMAKE_CURRENT_SOURCE_DIR}/ps1_disk_control_patch.cmake")
@@ -12,12 +12,16 @@ set(OMNICORE_MODERN_HOST_INPUT "${OMNICORE_DISK_HOST_OUTPUT}")
 set(OMNICORE_MODERN_HOST_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/libretro_host_modern.cpp")
 include("${CMAKE_CURRENT_SOURCE_DIR}/ps1_modern_control_patch.cmake")
 
+set(OMNICORE_ARC_HOST_INPUT "${OMNICORE_MODERN_HOST_OUTPUT}")
+set(OMNICORE_ARC_HOST_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/libretro_host_adaptive_arc.cpp")
+include("${CMAKE_CURRENT_SOURCE_DIR}/ps1_adaptive_arc_patch.cmake")
+
 add_library(
     omnicore_runtime
     SHARED
     native_bridge.cpp
     gl_presenter.cpp
-    "${OMNICORE_MODERN_HOST_OUTPUT}"
+    "${OMNICORE_ARC_HOST_OUTPUT}"
 )
 
 target_compile_features(omnicore_runtime PRIVATE cxx_std_20)
