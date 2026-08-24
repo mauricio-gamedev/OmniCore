@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.os.PowerManager
+import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import android.view.Gravity
@@ -36,6 +37,7 @@ import com.omnicore.emulator.settings.InputSettings
 import com.omnicore.emulator.settings.Ps1Settings
 import com.omnicore.emulator.storage.Ps1Files
 import com.omnicore.emulator.storage.Ps1BiosHealth
+import com.omnicore.emulator.storage.Ps1MediaLayout
 import com.omnicore.emulator.storage.SafGameSource
 import java.io.File
 import java.security.MessageDigest
@@ -64,6 +66,23 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
     private var successfulPolls = 0
     private var lastRuntimeMessage = ""
     private var biosLabel = "HLE"
+
+    private val physicalTankAssist = TankMovementAssist()
+    private var physicalTankButtons: Set<Int> = emptySet()
+    private var physicalTankGestureActive = false
+    private var physicalTankLoopRunning = false
+    private val physicalTankRunnable = object : Runnable {
+        override fun run() {
+            if (!physicalTankLoopRunning) return
+            val input = InputSettings.resolveForGame(this@EmulationActivity, gameKey)
+            if (!started || input.analogMode != InputSettings.AnalogMode.TANK_ASSIST || !physicalTankGestureActive) {
+                stopPhysicalTankAssist(clearButtons = true)
+                return
+            }
+            applyPhysicalTankButtons(physicalTankAssist.step(SystemClock.uptimeMillis()))
+            handler.postDelayed(this, PHYSICAL_TANK_FRAME_MS)
+        }
+    }
 
     private val statusPoll = object : Runnable {
         override fun run() {
@@ -162,7 +181,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
         ).apply { topMargin = dp(10) })
 
         presetView = TextView(this).apply {
-            val inputMode = InputSettings.resolve(this@EmulationActivity).analogMode.label
+            val inputMode = InputSettings.resolveForGame(this@EmulationActivity, gameKey).analogMode.label
             text = "${ps1Config.preset.label} • ${if (ps1Config.dualShock) "DualShock" else "Digital"} • $inputMode • $biosLabel"
             setTextColor(Color.argb(210, 226, 224, 255))
             textSize = 10f
@@ -250,7 +269,11 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun prepareGameAsync(uri: Uri, extension: String, folderUri: Uri?, companionUris: List<Uri>) {
-        statusView.text = if (extension == "cue") "PREP 1/3 • lendo CUE e faixas…" else "PREP 1/3 • abrindo $gameTitle…"
+        statusView.text = when (extension) {
+            "cue" -> "PREP 1/3 • lendo CUE e faixas…"
+            "ccd" -> "PREP 1/3 • lendo CCD e imagem…"
+            else -> "PREP 1/3 • abrindo $gameTitle…"
+        }
         preparationThread = Thread({
             val result = prepareSessionPath(uri, extension, folderUri, companionUris)
             handler.post {
@@ -280,8 +303,11 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
 
     private fun prepareSessionPath(uri: Uri, extension: String, folderUri: Uri?, companionUris: List<Uri>): Result<PreparedContent> =
         runCatching {
-            if (extension == "cue") prepareCueSession(uri, folderUri, companionUris)
-            else prepareSingleFileSession(uri, extension)
+            when (extension) {
+                "cue" -> prepareCueSession(uri, folderUri, companionUris)
+                "ccd" -> prepareCcdSession(uri, folderUri, companionUris)
+                else -> prepareSingleFileSession(uri, extension)
+            }
         }
 
     private fun prepareSingleFileSession(uri: Uri, extension: String): PreparedContent {
@@ -362,6 +388,47 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             marker.writeText(fingerprint, Charsets.UTF_8)
             ensurePreparationActive()
             PreparedContent(localCue.absolutePath, descriptors.toList(), dir, persistent = true)
+        } catch (error: Throwable) {
+            descriptors.forEach { runCatching { it.close() } }
+            runCatching { dir.deleteRecursively() }
+            throw error
+        }
+    }
+
+    private fun prepareCcdSession(ccdUri: Uri, folderUri: Uri?, companionUris: List<Uri>): PreparedContent {
+        val descriptors = mutableListOf<ParcelFileDescriptor>()
+        val dir = freshSessionDir()
+        return try {
+            ensurePreparationActive()
+            val sources = if (folderUri != null) {
+                SafGameSource.listDirectChildren(this, folderUri).filterNot { it.isDirectory }
+            } else {
+                (companionUris + ccdUri).distinctBy(Uri::toString).map { SafGameSource.metadata(this, it) }
+            }
+            val plan = Ps1MediaLayout.plan(sources)
+            val mediaSet = plan.sets.firstOrNull {
+                it.kind == Ps1MediaLayout.Kind.CCD_SET && it.primary.uri.toString() == ccdUri.toString()
+            } ?: error(
+                plan.warnings.firstOrNull()
+                    ?: "Não consegui montar o conjunto CCD/IMG. Importe a pasta completa do jogo."
+            )
+            val image = mediaSet.companions.firstOrNull { it.extension == "img" }
+                ?: error("O CCD precisa do arquivo IMG correspondente.")
+
+            statusView.post { statusView.text = "PREP 2/3 • preparando CCD/IMG${if (mediaSet.companions.any { it.extension == "sub" }) "/SUB" else ""}…" }
+            val staged = (listOf(mediaSet.primary, image) + mediaSet.companions.filter { it.extension in setOf("sub", "sbi") })
+                .distinctBy { it.uri.toString() }
+            staged.forEach { source ->
+                ensurePreparationActive()
+                val extension = source.extension.lowercase()
+                val target = File(dir, "game.$extension")
+                stageDocument(source.uri, target, descriptors)
+            }
+
+            val localCcd = File(dir, "game.ccd")
+            validateCcdSession(localCcd)
+            ensurePreparationActive()
+            PreparedContent(localCcd.absolutePath, descriptors.toList(), dir)
         } catch (error: Throwable) {
             descriptors.forEach { runCatching { it.close() } }
             runCatching { dir.deleteRecursively() }
@@ -473,6 +540,24 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
+    private fun validateCcdSession(ccdFile: File) {
+        require(ccdFile.isFile && ccdFile.length() > 0L) { "O descritor CCD ficou indisponível." }
+        val image = File(ccdFile.parentFile, "${ccdFile.nameWithoutExtension}.img")
+        require(image.exists() && image.length() > 0L) { "O IMG correspondente ao CCD ficou indisponível." }
+        runCatching {
+            java.io.RandomAccessFile(image, "r").use { file ->
+                val length = file.length()
+                require(length > 0L)
+                file.seek((length - 1L).coerceAtLeast(0L))
+                require(file.read() >= 0)
+            }
+        }.getOrElse {
+            error("O IMG do conjunto CCD não aceita leitura aleatória necessária para emulação de CD.")
+        }
+        val sub = File(ccdFile.parentFile, "${ccdFile.nameWithoutExtension}.sub")
+        if (sub.exists()) require(sub.length() > 0L) { "O SUB correspondente ao CCD está vazio." }
+    }
+
     private fun safeFileName(name: String): String = name.replace('\\', '_').replace('/', '_').ifBlank { "track.bin" }
 
     private fun ensurePreparationActive() {
@@ -515,6 +600,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
     }
 
     override fun onPause() {
+        stopPhysicalTankAssist(clearButtons = true)
         stopSession()
         super.onPause()
     }
@@ -524,6 +610,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
         preparationThread?.interrupt()
         preparationThread = null
         handler.removeCallbacks(statusPoll)
+        stopPhysicalTankAssist(clearButtons = true)
         unregisterThermalAdaptation()
         stopSession()
         sessionDescriptors.forEach { runCatching { it.close() } }
@@ -568,6 +655,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private fun stopSession() {
+        stopPhysicalTankAssist(clearButtons = true)
         if (::controls.isInitialized) controls.releaseAll()
         if (started) NativeBridge.stop()
         started = false
@@ -576,26 +664,85 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         val isJoystick = (event.source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
         if (started && isJoystick && event.action == MotionEvent.ACTION_MOVE) {
-            val input = InputSettings.resolve(this)
+            val input = InputSettings.resolveForGame(this, gameKey)
             val lx = normalizedAxis(event, MotionEvent.AXIS_X)
             val ly = normalizedAxis(event, MotionEvent.AXIS_Y)
             val rx = normalizedAxis(event, MotionEvent.AXIS_Z, MotionEvent.AXIS_RX)
             val ry = normalizedAxis(event, MotionEvent.AXIS_RZ, MotionEvent.AXIS_RY)
 
-            if (input.analogMode == InputSettings.AnalogMode.DPAD) NativeBridge.setAnalog(0, 0f, 0f)
-            else NativeBridge.setAnalog(0, lx, ly)
             NativeBridge.setAnalog(1, rx, ry)
-
-            if (input.analogMode != InputSettings.AnalogMode.NATIVE) {
-                val threshold = 0.42f
-                NativeBridge.setButton(4, ly <= -threshold)
-                NativeBridge.setButton(5, ly >= threshold)
-                NativeBridge.setButton(6, lx <= -threshold)
-                NativeBridge.setButton(7, lx >= threshold)
+            when (input.analogMode) {
+                InputSettings.AnalogMode.NATIVE -> {
+                    stopPhysicalTankAssist(clearButtons = true)
+                    NativeBridge.setAnalog(0, lx, ly)
+                    clearPhysicalDpad()
+                }
+                InputSettings.AnalogMode.DPAD -> {
+                    stopPhysicalTankAssist(clearButtons = true)
+                    NativeBridge.setAnalog(0, 0f, 0f)
+                    applyPhysicalDpadProjection(lx, ly)
+                }
+                InputSettings.AnalogMode.SMART -> {
+                    stopPhysicalTankAssist(clearButtons = true)
+                    NativeBridge.setAnalog(0, lx, ly)
+                    applyPhysicalDpadProjection(lx, ly)
+                }
+                InputSettings.AnalogMode.TANK_ASSIST -> {
+                    NativeBridge.setAnalog(0, 0f, 0f)
+                    val magnitude = kotlin.math.hypot(lx.toDouble(), ly.toDouble()).toFloat()
+                    if (magnitude >= PHYSICAL_TANK_DEADZONE) {
+                        if (!physicalTankGestureActive) {
+                            clearPhysicalDpad()
+                            physicalTankGestureActive = true
+                            physicalTankAssist.beginGesture(SystemClock.uptimeMillis())
+                        }
+                        physicalTankAssist.updateTarget(lx, ly)
+                        applyPhysicalTankButtons(physicalTankAssist.step(SystemClock.uptimeMillis()))
+                        ensurePhysicalTankLoop()
+                    } else {
+                        stopPhysicalTankAssist(clearButtons = true)
+                    }
+                }
             }
             return true
         }
         return super.onGenericMotionEvent(event)
+    }
+
+    private fun ensurePhysicalTankLoop() {
+        if (physicalTankLoopRunning || !physicalTankGestureActive) return
+        physicalTankLoopRunning = true
+        handler.postDelayed(physicalTankRunnable, PHYSICAL_TANK_FRAME_MS)
+    }
+
+    private fun stopPhysicalTankAssist(clearButtons: Boolean) {
+        physicalTankLoopRunning = false
+        handler.removeCallbacks(physicalTankRunnable)
+        physicalTankGestureActive = false
+        physicalTankAssist.reset()
+        if (clearButtons) applyPhysicalTankButtons(emptySet())
+    }
+
+    private fun applyPhysicalTankButtons(next: Set<Int>) {
+        if (next == physicalTankButtons) return
+        (physicalTankButtons - next).forEach { NativeBridge.setButton(it, false) }
+        (next - physicalTankButtons).forEach { NativeBridge.setButton(it, true) }
+        physicalTankButtons = next
+    }
+
+    private fun applyPhysicalDpadProjection(x: Float, y: Float) {
+        val threshold = 0.42f
+        NativeBridge.setButton(4, y <= -threshold)
+        NativeBridge.setButton(5, y >= threshold)
+        NativeBridge.setButton(6, x <= -threshold)
+        NativeBridge.setButton(7, x >= threshold)
+    }
+
+    private fun clearPhysicalDpad() {
+        NativeBridge.setButton(4, false)
+        NativeBridge.setButton(5, false)
+        NativeBridge.setButton(6, false)
+        NativeBridge.setButton(7, false)
     }
 
     private fun normalizedAxis(event: MotionEvent, primary: Int, fallback: Int? = null): Float {
@@ -632,6 +779,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             else -> null
         }
         if (id != null && started) {
+            if (id in 4..7 && event.action == KeyEvent.ACTION_DOWN) stopPhysicalTankAssist(clearButtons = true)
             when (event.action) {
                 KeyEvent.ACTION_DOWN -> NativeBridge.setButton(id, true)
                 KeyEvent.ACTION_UP -> NativeBridge.setButton(id, false)
@@ -668,6 +816,8 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
 
     companion object {
         private const val COPY_BUFFER_BYTES = 2 * 1024 * 1024
+        private const val PHYSICAL_TANK_FRAME_MS = 16L
+        private const val PHYSICAL_TANK_DEADZONE = 0.18f
         private const val EXTRA_GAME_URI = "gameUri"
         private const val EXTRA_GAME_ID = "gameId"
         private const val EXTRA_GAME_TITLE = "gameTitle"
