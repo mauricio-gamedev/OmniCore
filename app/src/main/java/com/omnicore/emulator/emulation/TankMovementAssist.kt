@@ -4,32 +4,34 @@ import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * Deterministic steering layer for digital PS1 games with tank controls.
+ * Modern steering layer for digital PS1 games with tank controls.
  *
- * The previous implementation estimated the character heading from elapsed time.
- * Different games turn at different speeds, so that estimate drifted and made the
- * left stick feel scrambled. This version is intentionally stateless: the stick is
- * translated directly to ordinary D-pad combinations every frame.
+ * The core still receives ordinary D-pad buttons, but the stick is interpreted as
+ * player intent instead of raw four-way input. The resolver uses hysteresis and
+ * directional cones so tiny finger/controller noise does not constantly switch
+ * between forward, turn and diagonal commands.
  *
- * Up/down become forward/backward, horizontal input turns in place, and diagonals
- * combine movement + turning. It does not read game memory or modify core timing.
+ * This remains game-state independent: it does not read character/camera memory and
+ * does not change emulation timing. That keeps the assist generic and deterministic.
  */
 internal class TankMovementAssist {
     private var targetX = 0f
     private var targetY = 0f
+    private var horizontalIntent = 0
+    private var verticalIntent = 0
+    private var movementActive = false
 
     fun beginGesture(nowMs: Long) {
-        // Keep the timestamp in the API so touch and physical-controller callers do
-        // not need separate paths. Steering itself is deliberately time-independent.
+        // Timestamp is retained in the API because touch and physical-controller
+        // callers share this class. Steering itself is deliberately time-independent.
         @Suppress("UNUSED_VARIABLE")
         val ignored = nowMs
-        targetX = 0f
-        targetY = 0f
+        reset()
     }
 
     fun updateTarget(x: Float, y: Float) {
         val magnitude = hypot(x.toDouble(), y.toDouble()).toFloat()
-        if (magnitude < TARGET_DEADZONE) {
+        if (magnitude < INPUT_EPSILON) {
             targetX = 0f
             targetY = 0f
             return
@@ -45,47 +47,118 @@ internal class TankMovementAssist {
 
         val x = targetX
         val y = targetY
-        if (hypot(x.toDouble(), y.toDouble()) < TARGET_DEADZONE) return NONE
+        val magnitude = hypot(x.toDouble(), y.toDouble()).toFloat()
 
-        val horizontal = when {
-            x <= -TURN_THRESHOLD -> -1
-            x >= TURN_THRESHOLD -> 1
-            else -> 0
-        }
-        val vertical = when {
-            y <= -MOVE_THRESHOLD -> -1 // screen up -> forward
-            y >= MOVE_THRESHOLD -> 1  // screen down -> backward
-            else -> 0
+        // Schmitt-style deadzone: entering movement needs a stronger deflection than
+        // staying active. This removes the stop/start chatter around the centre.
+        if (!movementActive) {
+            if (magnitude < TARGET_ENTER_DEADZONE) return NONE
+            movementActive = true
+        } else if (magnitude < TARGET_EXIT_DEADZONE) {
+            movementActive = false
+            horizontalIntent = 0
+            verticalIntent = 0
+            return NONE
         }
 
-        return when {
-            vertical < 0 && horizontal < 0 -> UP_LEFT
-            vertical < 0 && horizontal > 0 -> UP_RIGHT
-            vertical < 0 -> UP
-            vertical > 0 && horizontal < 0 -> DOWN_LEFT
-            vertical > 0 && horizontal > 0 -> DOWN_RIGHT
-            vertical > 0 -> DOWN
-            horizontal < 0 -> LEFT
-            horizontal > 0 -> RIGHT
-            // Near a sector boundary, prefer the dominant axis instead of dropping
-            // input completely. This removes the jittery/dead feeling around diagonals.
-            abs(y) >= abs(x) && y < 0f -> UP
-            abs(y) >= abs(x) && y > 0f -> DOWN
-            x < 0f -> LEFT
-            x > 0f -> RIGHT
-            else -> NONE
+        verticalIntent = resolveAxisIntent(
+            value = y,
+            current = verticalIntent,
+            enterThreshold = MOVE_ENTER_THRESHOLD,
+            exitThreshold = MOVE_EXIT_THRESHOLD
+        )
+        horizontalIntent = resolveAxisIntent(
+            value = x,
+            current = horizontalIntent,
+            enterThreshold = TURN_ENTER_THRESHOLD,
+            exitThreshold = TURN_EXIT_THRESHOLD
+        )
+
+        val ax = abs(x)
+        val ay = abs(y)
+
+        // Wide straight cone: when the player is clearly pushing forward/backward,
+        // small sideways drift should not make the character snake left/right.
+        if (verticalIntent != 0 && ax < ay * STRAIGHT_CONE_RATIO && ax < FORCE_TURN_THRESHOLD) {
+            horizontalIntent = 0
         }
+
+        // Wide turn-in-place cone: near-horizontal stick movement should rotate the
+        // character cleanly instead of accidentally adding a forward/back command.
+        if (horizontalIntent != 0 && ay < ax * TURN_ONLY_CONE_RATIO && ay < FORCE_MOVE_THRESHOLD) {
+            verticalIntent = 0
+        }
+
+        // If both axes are between their normal thresholds, keep a useful dominant
+        // direction instead of dropping input. This makes slow thumb arcs predictable.
+        if (verticalIntent == 0 && horizontalIntent == 0) {
+            if (ay >= ax) {
+                verticalIntent = if (y < 0f) -1 else if (y > 0f) 1 else 0
+            } else {
+                horizontalIntent = if (x < 0f) -1 else if (x > 0f) 1 else 0
+            }
+        }
+
+        return buttonsFor(verticalIntent, horizontalIntent)
     }
 
     fun reset() {
         targetX = 0f
         targetY = 0f
+        horizontalIntent = 0
+        verticalIntent = 0
+        movementActive = false
+    }
+
+    private fun resolveAxisIntent(
+        value: Float,
+        current: Int,
+        enterThreshold: Float,
+        exitThreshold: Float
+    ): Int = when (current) {
+        -1 -> when {
+            value >= enterThreshold -> 1
+            value > -exitThreshold -> 0
+            else -> -1
+        }
+        1 -> when {
+            value <= -enterThreshold -> -1
+            value < exitThreshold -> 0
+            else -> 1
+        }
+        else -> when {
+            value <= -enterThreshold -> -1
+            value >= enterThreshold -> 1
+            else -> 0
+        }
+    }
+
+    private fun buttonsFor(vertical: Int, horizontal: Int): Set<Int> = when {
+        vertical < 0 && horizontal < 0 -> UP_LEFT
+        vertical < 0 && horizontal > 0 -> UP_RIGHT
+        vertical < 0 -> UP
+        vertical > 0 && horizontal < 0 -> DOWN_LEFT
+        vertical > 0 && horizontal > 0 -> DOWN_RIGHT
+        vertical > 0 -> DOWN
+        horizontal < 0 -> LEFT
+        horizontal > 0 -> RIGHT
+        else -> NONE
     }
 
     private companion object {
-        const val TARGET_DEADZONE = 0.18f
-        const val MOVE_THRESHOLD = 0.30f
-        const val TURN_THRESHOLD = 0.30f
+        const val INPUT_EPSILON = 0.02f
+        const val TARGET_ENTER_DEADZONE = 0.18f
+        const val TARGET_EXIT_DEADZONE = 0.12f
+
+        const val MOVE_ENTER_THRESHOLD = 0.30f
+        const val MOVE_EXIT_THRESHOLD = 0.20f
+        const val TURN_ENTER_THRESHOLD = 0.32f
+        const val TURN_EXIT_THRESHOLD = 0.21f
+
+        const val STRAIGHT_CONE_RATIO = 0.34f
+        const val TURN_ONLY_CONE_RATIO = 0.30f
+        const val FORCE_TURN_THRESHOLD = 0.46f
+        const val FORCE_MOVE_THRESHOLD = 0.44f
 
         val NONE: Set<Int> = emptySet()
         val UP: Set<Int> = setOf(4)
