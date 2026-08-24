@@ -1,4 +1,4 @@
-name: OmniCore 0.11.5 Full Recovery APK
+name: OmniCore Alpha 6 + PS1 Input 2.0 Full APK
 
 on:
   push:
@@ -6,41 +6,80 @@ on:
     paths:
       - ".github/workflows/recovery-0.11.5-full.yml"
       - "app/build.gradle.kts"
+      - "app/src/main/cpp/CMakeLists.txt"
+      - "app/src/main/cpp/libretro_abi.h"
+      - "app/src/main/cpp/libretro_host.h"
+      - "app/src/main/cpp/native_bridge.cpp"
+      - "app/src/main/cpp/ps1_disk_control_patch.cmake"
+      - "app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt"
+      - "app/src/main/java/com/omnicore/emulator/core/ps1/**"
+      - "app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt"
+      - "app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt"
+      - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"
+      - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaPreflight.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1PlaylistMedia.kt"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: omnicore-full-recovery-0115
+  group: omnicore-alpha6-ps1-input2-full
   cancel-in-progress: true
 
 jobs:
-  build-recovery:
+  build-full:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout exact full-feature recovery branch
+      - name: Checkout Alpha 6 plus PS1 branch
         uses: actions/checkout@v4
         with:
           ref: agent/recovery-0.11.5-full
           fetch-depth: 0
 
-      - name: Verify full 0.11.5 feature baseline
+      - name: Verify Alpha 6 features stayed intact
         shell: bash
         run: |
           set -euo pipefail
           grep -Fq 'versionCode = 47' app/build.gradle.kts
-          grep -Fq 'versionName = "0.11.5-recovery1"' app/build.gradle.kts
+          grep -Fq 'versionName = "0.11.6-ps1-input2"' app/build.gradle.kts
           test -d app/src/main/java/com/omnicore/emulator/achievements
+          test -f app/src/main/java/com/omnicore/emulator/achievements/OmniAchievements.kt
           test -d app/src/main/java/com/omnicore/emulator/core/n64
           test -d app/src/main/java/com/omnicore/emulator/core/ps2
           test -f app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
+          grep -Fq 'AchievementsScreen()' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
           grep -Fq 'class Pcsx2PS2Backend' app/src/main/java/com/omnicore/emulator/core/ps2/Pcsx2PS2Backend.kt
           grep -Fq '7f0ae7a6c689b5b36eccc61b7adb480f65c7a3a3' config/ps2-pcsx2-pin.txt
-          echo 'FULL_FEATURE_BASELINE_OK'
+          echo 'ALPHA6_FEATURE_BASELINE_OK'
+
+      - name: Verify PS1 Input 2.0 and Compatibility 2.0 source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'TANK_ASSIST' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'applySmartAutoProfile' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'object Ps1ControlProfiles' app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
+          grep -Fq 'class TankMovementAssist' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
+          grep -Fq 'Ps1MediaPreflight.validate' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -Fq '"m3u"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -Fq 'Ps1PlaylistMedia.plan' app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt
+          grep -Fq 'Ps1MediaLayout.Kind.CCD_SET' app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt
+          grep -Fq 'ps1-multidisc-session' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -Fq 'forceCopy = false' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -Fq 'NativeBridge.setDiskIndex' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -Fq 'fun diskState()' app/src/main/java/com/omnicore/emulator/core/nativebridge/NativeBridge.kt
+          grep -Fq 'OMNICORE_DISK_HOST_OUTPUT' app/src/main/cpp/CMakeLists.txt
+          test -f app/src/main/cpp/ps1_disk_control_patch.cmake
+          echo 'PS1_INPUT2_COMPAT2_SOURCE_OK'
 
       - name: Verify Android toolchains
         shell: bash
@@ -70,7 +109,7 @@ jobs:
           echo 'OMNICORE_DEV_KEY_ALIAS=omnicore-dev' >> "$GITHUB_ENV"
           echo 'OMNICORE_DEV_KEY_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
 
-      - name: Build PS1 and N64 cores
+      - name: Build protected PS1 and N64 cores
         shell: bash
         run: |
           set -euo pipefail
@@ -85,7 +124,7 @@ jobs:
             test -s "app/src/main/jniLibs/$ABI/libmupen64plus_next_libretro.so"
           done
 
-      - name: Build pinned PCSX2 ARM64 backend
+      - name: Build pinned PCSX2 Alpha 6 backend
         shell: bash
         run: |
           set -euo pipefail
@@ -98,14 +137,14 @@ jobs:
           test -s app/src/main/jniLibs/arm64-v8a/libemucore_16k.so
           test -n "$(find app/src/main/assets/pcsx2/resources -type f -print -quit)"
 
-      - name: Build signed release APK
+      - name: Build signed full release APK
         shell: bash
         run: |
           set -euo pipefail
           gradle :app:assembleRelease --stacktrace --no-daemon
           test -s app/build/outputs/apk/release/app-release.apk
 
-      - name: Verify recovery APK identity and installability
+      - name: Verify full APK identity, signer, cores and 16 KB compatibility
         shell: bash
         run: |
           set -euo pipefail
@@ -116,60 +155,86 @@ jobs:
           READELF="$OMNI_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
           EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
           unzip -tqq "$APK"
-          "$AAPT" dump badging "$APK" | tee build/recovery-badging.txt
-          grep -q "package: name='com.omnicore.emulator' versionCode='47' versionName='0.11.5-recovery1'" build/recovery-badging.txt
-          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/recovery-cert.txt
-          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/recovery-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          "$AAPT" dump badging "$APK" | tee build/full-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='47' versionName='0.11.6-ps1-input2'" build/full-badging.txt
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/full-cert.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/full-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test "$ACTUAL" = "$EXPECTED"
-          CHECK=build/recovery-apk-unpack
+          CHECK=build/full-apk-unpack
           rm -rf "$CHECK" && mkdir -p "$CHECK"
           unzip -q "$APK" -d "$CHECK"
+          test -f "$CHECK/lib/arm64-v8a/libomnicore_runtime.so"
           test -f "$CHECK/lib/arm64-v8a/libpcsx_rearmed_libretro.so"
           test -f "$CHECK/lib/arm64-v8a/libmupen64plus_next_libretro.so"
           test -f "$CHECK/lib/arm64-v8a/libemucore_4k.so"
           test -f "$CHECK/lib/arm64-v8a/libemucore_16k.so"
           while IFS= read -r -d '' SO; do
+            FOUND=0
             while IFS= read -r LOAD; do
+              FOUND=1
               A="$(awk '{print $NF}' <<< "$LOAD")"
               [[ "$A" =~ ^0x[0-9A-Fa-f]+$ ]] || exit 1
               (( A >= 0x4000 )) || { echo "ELF below 16KB alignment: $SO :: $LOAD" >&2; exit 1; }
             done < <("$READELF" -lW "$SO" | grep -E '^[[:space:]]*LOAD[[:space:]]')
+            (( FOUND == 1 )) || { echo "No LOAD segments: $SO" >&2; exit 1; }
           done < <(find "$CHECK/lib" -type f -name '*.so' -print0)
           "$ZIPALIGN" -v -c -P 16 4 "$APK"
 
-      - name: Package recovery APK
+      - name: Package full APK
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/recovery
-          OUT=build/recovery/OmniCore-v0.11.5-recovery1-full.apk
+          mkdir -p build/full
+          OUT=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
+          DEV=build/full/OmniCore-v0.11.6-debug.apk
           cp app/build/outputs/apk/release/app-release.apk "$OUT"
-          sha256sum "$OUT" > build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
+          cp "$OUT" "$DEV"
+          sha256sum "$OUT" > build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
+          sha256sum "$DEV" > build/full/OmniCore-v0.11.6-debug.sha256
 
-      - name: Upload recovery artifact
+      - name: Upload full APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OmniCore-v0.11.5-recovery1-full
+          name: OmniCore-v0.11.6-ps1-input2-alpha6-full
           path: |
-            build/recovery/OmniCore-v0.11.5-recovery1-full.apk
-            build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
-            build/recovery-badging.txt
+            build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
+            build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
+            build/full/OmniCore-v0.11.6-debug.apk
+            build/full/OmniCore-v0.11.6-debug.sha256
+            build/full-badging.txt
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish recovery prerelease
+      - name: Publish Alpha 6 plus PS1 Input 2.0 prerelease
         shell: bash
         run: |
           set -euo pipefail
-          TAG=v0.11.5-recovery1
-          TITLE='OmniCore v0.11.5 Full Recovery — build 47'
-          APK=build/recovery/OmniCore-v0.11.5-recovery1-full.apk
-          HASH=build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
-          NOTES='Recovery build made from the exact validated 0.11.5 PS2 Alpha 6 source baseline (commit 308ea7a), preserving Achievements, N64, PS2, PS1, OmniCore V4 UI and the stable DEV signer. Only the Android version was raised to build 47 so it can replace the accidental build 46 without uninstalling or wiping app data.'
+          TAG=v0.11.6-ps1-input2
+          TITLE='OmniCore v0.11.6 — Alpha 6 + PS1 Input 2.0'
+          APK=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
+          HASH=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
+          NOTES='Built directly on the complete validated 0.11.5 PS2 Alpha 6 baseline. Preserves OmniCore V4, Achievements, N64 Alpha 24 and PCSX2 Alpha 6, then adds PS1 Input 2.0, Smart Auto, tank-control assist, media preflight, CUE/CCD, M3U multi-disc, zero-copy-first multi-disc staging and in-game disk control. VersionCode 47 replaces the accidental build 46 without uninstalling app data.'
           TARGET="$(git rev-parse HEAD)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
           else
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TITLE" --notes "$NOTES" --prerelease
           fi
-          gh release upload "$TAG" "$APK" "$HASH" build/recovery-badging.txt --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "$TAG" "$APK" "$HASH" build/full-badging.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Publish standard DEV updater asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.11.6-dev
+          TITLE='OmniCore v0.11.6 DEV — Alpha 6 + PS1 Input 2.0'
+          APK=build/full/OmniCore-v0.11.6-debug.apk
+          HASH=build/full/OmniCore-v0.11.6-debug.sha256
+          NOTES='Same validated full APK exposed through the OmniCore DEV updater. It is based on Alpha 6 and retains Achievements, N64 and PS2 while adding the new PS1 stack.'
+          TARGET="$(git rev-parse HEAD)"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+          gh release upload "$TAG" "$APK" "$HASH" --repo "$GITHUB_REPOSITORY" --clobber
