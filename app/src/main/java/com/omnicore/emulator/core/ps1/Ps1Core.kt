@@ -6,9 +6,11 @@ import com.omnicore.emulator.core.CoreState
 import com.omnicore.emulator.core.EmulatorCore
 import com.omnicore.emulator.core.nativebridge.NativeBridge
 import com.omnicore.emulator.emulation.EmulationActivity
+import com.omnicore.emulator.emulation.Ps1ControlProfiles
 import com.omnicore.emulator.library.RomDetector
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
+import com.omnicore.emulator.settings.InputSettings
 
 class Ps1Core : EmulatorCore {
     override val info = CoreInfo(
@@ -39,6 +41,12 @@ class Ps1Core : EmulatorCore {
                 "Este CCD precisa do IMG correspondente. Importe a pasta completa do jogo para manter CCD/IMG/SUB juntos."
             }
         }
+
+        // Resolve SMART before the Activity exists so touch and physical controllers
+        // receive the same per-game policy from their very first input event.
+        val recommendation = Ps1ControlProfiles.recommend(game.title, game.fileName)
+        InputSettings.applySmartAutoProfile(context, game.id, recommendation.mode)
+
         context.startActivity(EmulationActivity.intent(context, game, extension))
     }
 
