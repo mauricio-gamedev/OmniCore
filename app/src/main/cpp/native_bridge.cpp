@@ -18,12 +18,18 @@ std::string toString(JNIEnv* env, jstring value) {
     env->ReleaseStringUTFChars(value, chars);
     return out;
 }
+
+std::int16_t clampAxis(jint value) {
+    if (value < -32768) value = -32768;
+    if (value > 32767) value = 32767;
+    return static_cast<std::int16_t>(value);
+}
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeRuntimeVersion(
         JNIEnv* env, jobject /* thiz */) {
-    return env->NewStringUTF("OmniCore Native Runtime 0.9.3 / libretro host v8 / PS1 disk control / EGL-GLES presenter");
+    return env->NewStringUTF("OmniCore Native Runtime 0.9.4 / libretro host v8 / PS1 disk control / Modern Control Engine v2 / EGL-GLES presenter");
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -81,9 +87,7 @@ Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeStartPs1(
     );
 
     // LibretroSession owns the ANativeWindow reference from this point onward.
-    if (!session->start()) {
-        return JNI_FALSE;
-    }
+    if (!session->start()) return JNI_FALSE;
 
     {
         std::lock_guard<std::mutex> lock(gSessionMutex);
@@ -139,12 +143,16 @@ Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeSetAnalog(
         JNIEnv* /* env */, jobject /* thiz */, jint stick, jint x, jint y) {
     std::lock_guard<std::mutex> lock(gSessionMutex);
     if (!gSession || stick < 0 || stick > 1) return;
-    const auto clampAxis = [](jint value) -> std::int16_t {
-        if (value < -32768) value = -32768;
-        if (value > 32767) value = 32767;
-        return static_cast<std::int16_t>(value);
-    };
     gSession->setAnalog(static_cast<unsigned>(stick), clampAxis(x), clampAxis(y));
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeSetModernTankIntent(
+        JNIEnv* /* env */, jobject /* thiz */, jint x, jint y, jboolean active) {
+    std::lock_guard<std::mutex> lock(gSessionMutex);
+    if (!gSession) return JNI_FALSE;
+    return gSession->setModernTankIntent(clampAxis(x), clampAxis(y), active == JNI_TRUE)
+        ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT void JNICALL
