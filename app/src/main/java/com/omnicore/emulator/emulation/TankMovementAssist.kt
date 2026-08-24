@@ -3,17 +3,24 @@ package com.omnicore.emulator.emulation
 import com.omnicore.emulator.core.nativebridge.NativeBridge
 import kotlin.math.abs
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 
 /**
- * Frontend for PS1 Modern Control Engine v2.
+ * Frontend for PS1 Modern Control Engine v2.1.
  *
  * Preferred path: publish continuous analog intent to the PS1 native host. The host
  * filters and sigma-delta-modulates turn strength once per emulated frame immediately
  * before retro_run(), so steering is independent from Android timer jitter.
  *
+ * R5 keeps the precise R4 forward/back behavior, but gives deliberate diagonals more
+ * steering authority with a softer mid-stick curve, gated diagonal boost and strong
+ * edge response. The generated D-pad direction is still pulsed rather than held, so
+ * tank-control games keep smooth course correction instead of an always-on diagonal.
+ *
  * Compatibility path: if the active runtime does not expose the native engine, keep
- * the validated R3 millisecond PWM implementation. Touch/physical callers therefore
- * do not need a second code path and legacy APK/runtime combinations fail gracefully.
+ * a mirrored millisecond PWM fallback. Touch/physical callers therefore do not need
+ * a second code path and legacy APK/runtime combinations fail gracefully.
  */
 internal class TankMovementAssist {
     private var targetX = 0f
@@ -21,7 +28,7 @@ internal class TankMovementAssist {
     private var gestureActive = false
     private var nativeDelegated = false
 
-    // R3 fallback state. It is dormant whenever nativeDelegated == true.
+    // Compatibility fallback state. Dormant whenever nativeDelegated == true.
     private var movementActive = false
     private var pulseEpochMs = 0L
     private var lastTurnSign = 0
@@ -56,8 +63,8 @@ internal class TankMovementAssist {
 
     fun step(nowMs: Long): Set<Int> {
         // Native generated D-pad bits are OR'ed into the PS1 host input mask. Returning
-        // NONE here also clears any R3 fallback bits that may have existed before a
-        // late delegation succeeded.
+        // NONE here also clears any fallback bits that may have existed before a late
+        // delegation succeeded.
         if (nativeDelegated) return NONE
         return fallbackStep(nowMs)
     }
@@ -86,6 +93,8 @@ internal class TankMovementAssist {
             else -> 0
         }
 
+        // Keep deliberate horizontal input as direct turn-in-place. The R5 steering
+        // changes only the moving-curve path, so alignment behavior stays predictable.
         if (turnSign != 0 && ax >= TURN_IN_PLACE_X && ay <= TURN_IN_PLACE_Y) {
             lastTurnSign = turnSign
             wasSteering = true
@@ -122,9 +131,21 @@ internal class TankMovementAssist {
 
         val normalized = ((ax - STRAIGHT_STEER_DEADZONE) / (1f - STRAIGHT_STEER_DEADZONE))
             .coerceIn(0f, 1f)
-        val curved = 0.32f * normalized + 0.68f * normalized * normalized
-        val duty = (MIN_TURN_DUTY + (MAX_TURN_DUTY - MIN_TURN_DUTY) * curved)
-            .coerceIn(MIN_TURN_DUTY, MAX_TURN_DUTY)
+
+        // More linear mid-stick response than R4. Small deflection stays precise;
+        // a real diagonal receives visibly stronger steering without becoming a held
+        // digital diagonal.
+        val curved = CURVE_LINEAR * normalized + CURVE_QUADRATIC * normalized * normalized
+        val baseDuty = MIN_TURN_DUTY + (MAX_TURN_DUTY - MIN_TURN_DUTY) * curved
+
+        val minAxis = min(ax, ay)
+        val maxAxis = max(ax, ay).coerceAtLeast(0.0001f)
+        val diagonalRatio = (minAxis / maxAxis).coerceIn(0f, 1f)
+        val diagonalGate = ((minAxis - DIAGONAL_GATE_START) / DIAGONAL_GATE_RANGE).coerceIn(0f, 1f)
+        val diagonalBoost = DIAGONAL_BOOST * diagonalRatio * diagonalGate
+        val edgeBoost = EDGE_BOOST * ((ax - EDGE_BOOST_START) / EDGE_BOOST_RANGE).coerceIn(0f, 1f)
+
+        val duty = (baseDuty + diagonalBoost + edgeBoost).coerceIn(MIN_TURN_DUTY, MAX_TURN_DUTY)
         val activeMs = (TURN_PULSE_PERIOD_MS * duty).toLong().coerceAtLeast(MIN_TURN_PULSE_MS)
         val phase = ((nowMs - pulseEpochMs).coerceAtLeast(0L) % TURN_PULSE_PERIOD_MS)
         if (phase >= activeMs) return moveButton
@@ -156,18 +177,27 @@ internal class TankMovementAssist {
         const val TARGET_ENTER_DEADZONE = 0.17f
         const val TARGET_EXIT_DEADZONE = 0.11f
         const val MOVE_AXIS_DEADZONE = 0.22f
-        const val TURN_AXIS_DEADZONE = 0.16f
+        const val TURN_AXIS_DEADZONE = 0.13f
         const val VERTICAL_DOMINANCE = 0.72f
 
         const val TURN_IN_PLACE_X = 0.48f
         const val TURN_IN_PLACE_Y = 0.24f
-        const val STRAIGHT_STEER_DEADZONE = 0.14f
-        const val STRAIGHT_CONE_RATIO = 0.20f
+        const val STRAIGHT_STEER_DEADZONE = 0.12f
+        const val STRAIGHT_CONE_RATIO = 0.18f
 
         const val TURN_PULSE_PERIOD_MS = 96L
         const val MIN_TURN_PULSE_MS = 18L
-        const val MIN_TURN_DUTY = 0.20f
-        const val MAX_TURN_DUTY = 0.92f
+        const val MIN_TURN_DUTY = 0.16f
+        const val MAX_TURN_DUTY = 0.98f
+        const val CURVE_LINEAR = 0.62f
+        const val CURVE_QUADRATIC = 0.38f
+
+        const val DIAGONAL_GATE_START = 0.20f
+        const val DIAGONAL_GATE_RANGE = 0.42f
+        const val DIAGONAL_BOOST = 0.16f
+        const val EDGE_BOOST_START = 0.72f
+        const val EDGE_BOOST_RANGE = 0.28f
+        const val EDGE_BOOST = 0.06f
 
         val NONE: Set<Int> = emptySet()
         val UP: Set<Int> = setOf(4)
