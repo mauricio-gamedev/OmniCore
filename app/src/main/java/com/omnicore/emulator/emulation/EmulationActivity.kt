@@ -442,7 +442,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
 
     private fun prepareM3uSession(m3uUri: Uri, folderUri: Uri?, companionUris: List<Uri>): PreparedContent {
         val descriptors = mutableListOf<ParcelFileDescriptor>()
-        val dir = m3uCacheDir()
+        val dir = freshM3uSessionDir()
         return try {
             ensurePreparationActive()
             val sources = if (folderUri != null) {
@@ -453,25 +453,10 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             val playlist = sources.firstOrNull { it.uri.toString() == m3uUri.toString() }
                 ?: SafGameSource.metadata(this, m3uUri)
             val plan = Ps1PlaylistMedia.plan(this, playlist, sources).getOrThrow()
-            val playlistText = Ps1PlaylistMedia.readText(this, m3uUri)
-            val fingerprint = cueFingerprint(playlistText, plan.stagingDocuments)
-            val marker = File(dir, ".source-fingerprint")
             val localM3u = File(dir, "game.m3u")
 
-            val cacheValid = runCatching {
-                marker.isFile && marker.readText(Charsets.UTF_8) == fingerprint &&
-                    localM3u.isFile && localM3u.length() > 0L &&
-                    validateM3uSession(localM3u).let { true }
-            }.getOrDefault(false)
-            if (cacheValid) {
-                statusView.post { statusView.text = "PREP 2/3 • cache multi-disc validado — início rápido" }
-                return PreparedContent(localM3u.absolutePath, emptyList(), dir, persistent = true)
-            }
-
-            runCatching { dir.deleteRecursively() }
-            require(dir.mkdirs() || dir.isDirectory) { "Não consegui criar o cache multi-disc." }
             statusView.post {
-                statusView.text = "PREP 2/3 • preparando ${plan.manifest.discs.size} discos pela primeira vez…"
+                statusView.text = "PREP 2/3 • vinculando ${plan.manifest.discs.size} discos sem duplicar armazenamento…"
             }
 
             val payload = plan.stagingDocuments.filterNot { it.uri.toString() == m3uUri.toString() }
@@ -481,9 +466,12 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
                 "A playlist contém arquivos diferentes com o mesmo nome local: ${duplicateNames.keys.first()}."
             }
 
+            // Prefer retained-FD /proc/self/fd symlinks so a 2–4 disc set is not copied
+            // into app cache. stageDocument still falls back to a temporary copy when
+            // the Android provider is not seekable or rejects the symlink path.
             payload.forEach { source ->
                 ensurePreparationActive()
-                stageDocument(source.uri, File(dir, safeFileName(source.name)), descriptors, forceCopy = true)
+                stageDocument(source.uri, File(dir, safeFileName(source.name)), descriptors, forceCopy = false)
             }
 
             val rewritten = buildString {
@@ -498,9 +486,8 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             }
             localM3u.writeText(rewritten, Charsets.UTF_8)
             validateM3uSession(localM3u)
-            marker.writeText(fingerprint, Charsets.UTF_8)
             ensurePreparationActive()
-            PreparedContent(localM3u.absolutePath, descriptors.toList(), dir, persistent = true)
+            PreparedContent(localM3u.absolutePath, descriptors.toList(), dir, persistent = false)
         } catch (error: Throwable) {
             descriptors.forEach { runCatching { it.close() } }
             runCatching { dir.deleteRecursively() }
@@ -537,9 +524,12 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
         }
     }
 
-    private fun m3uCacheDir(): File {
+    private fun freshM3uSessionDir(): File {
         val safeKey = gameKey.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        return File(cacheDir, "ps1-disc-cache/$safeKey-multidisc")
+        val dir = File(cacheDir, "ps1-multidisc-session/$safeKey")
+        dir.deleteRecursively()
+        require(dir.mkdirs() || dir.isDirectory) { "Não consegui criar a sessão multi-disc temporária." }
+        return dir
     }
 
     private fun cueCacheDir(): File {
