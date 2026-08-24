@@ -23,7 +23,7 @@ std::string toString(JNIEnv* env, jstring value) {
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeRuntimeVersion(
         JNIEnv* env, jobject /* thiz */) {
-    return env->NewStringUTF("OmniCore Native Runtime 0.9.3 / libretro host v7 / EGL-GLES presenter");
+    return env->NewStringUTF("OmniCore Native Runtime 0.9.3 / libretro host v8 / PS1 disk control / EGL-GLES presenter");
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -174,6 +174,35 @@ Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeSetCheat(
     std::lock_guard<std::mutex> lock(gSessionMutex);
     if (!gSession || index < 0 || index > 127 || !code) return;
     gSession->requestCheatSet(static_cast<unsigned>(index), enabled == JNI_TRUE, toString(env, code));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeDiskCount(
+        JNIEnv* /* env */, jobject /* thiz */) {
+    std::lock_guard<std::mutex> lock(gSessionMutex);
+    return gSession ? static_cast<jint>(gSession->diskCount()) : 0;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeDiskIndex(
+        JNIEnv* /* env */, jobject /* thiz */) {
+    std::lock_guard<std::mutex> lock(gSessionMutex);
+    return gSession ? static_cast<jint>(gSession->diskIndex()) : 0;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeDiskEjected(
+        JNIEnv* /* env */, jobject /* thiz */) {
+    std::lock_guard<std::mutex> lock(gSessionMutex);
+    return (gSession && gSession->diskEjected()) ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_omnicore_emulator_core_nativebridge_NativeBridge_nativeSetDiskIndex(
+        JNIEnv* /* env */, jobject /* thiz */, jint index) {
+    std::lock_guard<std::mutex> lock(gSessionMutex);
+    if (!gSession || index < 0) return JNI_FALSE;
+    return gSession->requestDiskIndex(static_cast<int>(index)) ? JNI_TRUE : JNI_FALSE;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
