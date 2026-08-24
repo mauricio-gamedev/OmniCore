@@ -93,7 +93,7 @@ jobs:
           test -s "$APK"
           unzip -tqq "$APK"
           "$AAPT" dump badging "$APK" | tee build/apk-badging.txt
-          grep -q "package: name='com.omnicore.emulator' versionCode='17' versionName='0.9.5-ps1-input2-r2'" build/apk-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='46' versionName='0.9.5-ps1-input2-r3'" build/apk-badging.txt
 
           "$APKSIGNER" verify --verbose --print-certs "$APK"
           ACTUAL="$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
@@ -122,20 +122,20 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/ps1-input2
-          R2="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.apk"
+          R3="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.apk"
           DEV="build/ps1-input2/OmniCore-v0.9.5-debug.apk"
-          cp app/build/outputs/apk/debug/app-debug.apk "$R2"
-          cp "$R2" "$DEV"
-          sha256sum "$R2" > build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk "$R3"
+          cp "$R3" "$DEV"
+          sha256sum "$R3" > build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.sha256
           sha256sum "$DEV" > build/ps1-input2/OmniCore-v0.9.5-debug.sha256
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OmniCore-v0.9.5-ps1-input2-r2
+          name: OmniCore-v0.9.5-ps1-input2-r3
           path: |
-            build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.apk
-            build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.sha256
+            build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.apk
+            build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.sha256
             build/ps1-input2/OmniCore-v0.9.5-debug.apk
             build/ps1-input2/OmniCore-v0.9.5-debug.sha256
             build/apk-badging.txt
@@ -146,11 +146,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="ps1-input2-0.9.5-r2-test"
-          TITLE="OmniCore 0.9.5 PS1 Input 2.0 R2"
-          NOTES="Fresh uniquely named APK. CI validates ZIP integrity, AndroidManifest parsing, package com.omnicore.emulator, versionCode 17, stable OmniCore DEV signing certificate, full APK signature, every native ELF LOAD segment at 16 KB or greater, and APK zip alignment before publishing."
-          APK="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.apk"
-          HASH="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r2.sha256"
+          TAG="ps1-input2-0.9.5-r3-test"
+          TITLE="OmniCore 0.9.5 PS1 Input 2.0 R3"
+          NOTES="Fresh test APK with versionCode 46, explicitly above the installed device build code 45 reported by Android. CI validates ZIP integrity, AndroidManifest parsing, package com.omnicore.emulator, stable OmniCore DEV signing certificate, full APK signature, every native ELF LOAD segment at 16 KB or greater, and APK zip alignment before publishing."
+          APK="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.apk"
+          HASH="build/ps1-input2/OmniCore-v0.9.5-ps1-input2-r3.sha256"
           TARGET="$(git rev-parse HEAD)"
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -166,7 +166,7 @@ jobs:
           set -euo pipefail
           TAG="v0.9.5-dev"
           TITLE="OmniCore v0.9.5 PS1 Input 2.0 + Compatibility 2.0"
-          NOTES="Same validated R2 APK exposed through OmniCore's built-in DEV updater. This path uses Android PackageInstaller from the already-installed OmniCore, so any device-side install rejection returns the detailed PackageInstaller status message instead of the generic file-manager message."
+          NOTES="Same validated R3 APK exposed through OmniCore's built-in DEV updater. VersionCode 46 is above the currently installed device build code 45, preventing INSTALL_FAILED_VERSION_DOWNGRADE."
           APK="build/ps1-input2/OmniCore-v0.9.5-debug.apk"
           HASH="build/ps1-input2/OmniCore-v0.9.5-debug.sha256"
           TARGET="$(git rev-parse HEAD)"
