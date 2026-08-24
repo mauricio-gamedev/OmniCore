@@ -45,8 +45,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          grep -Fq 'versionCode = 47' app/build.gradle.kts
-          grep -Fq 'versionName = "0.11.6-ps1-input2"' app/build.gradle.kts
+          grep -Fq 'versionCode = 48' app/build.gradle.kts
+          grep -Fq 'versionName = "0.11.6-ps1-input2-r2"' app/build.gradle.kts
           test -f app/src/main/java/com/omnicore/emulator/achievements/OmniAchievements.kt
           test -f app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
           grep -Fq 'AchievementsScreen()' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
@@ -61,9 +61,12 @@ jobs:
         run: |
           set -euo pipefail
           grep -Fq 'TANK_ASSIST' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -Fq 'KEY_MANUAL_ANALOG' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
           grep -Fq 'applySmartAutoProfile' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
           grep -Fq 'object Ps1ControlProfiles' app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
           grep -Fq 'class TankMovementAssist' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
+          grep -Fq 'DOWN_LEFT' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
+          grep -Fq 'time-independent' app/src/main/java/com/omnicore/emulator/emulation/TankMovementAssist.kt
           grep -Fq 'Ps1MediaPreflight.validate' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
           grep -Fq '"m3u"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
           grep -Fq 'Ps1PlaylistMedia.plan' app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt
@@ -179,7 +182,7 @@ jobs:
           EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
           unzip -tqq "$APK"
           "$AAPT" dump badging "$APK" | tee build/full-badging.txt
-          grep -q "package: name='com.omnicore.emulator' versionCode='47' versionName='0.11.6-ps1-input2'" build/full-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='48' versionName='0.11.6-ps1-input2-r2'" build/full-badging.txt
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/full-cert.txt
           ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/full-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
           test "$ACTUAL" = "$EXPECTED"
@@ -212,30 +215,30 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/full
-          OUT=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
+          OUT=build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.apk
           cp app/build/outputs/apk/release/app-release.apk "$OUT"
-          sha256sum "$OUT" > build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
+          sha256sum "$OUT" > build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.sha256
 
       - name: Upload full APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: OmniCore-v0.11.6-ps1-input2-alpha6-full
+          name: OmniCore-v0.11.6-ps1-input2-r2-alpha6-full
           path: |
-            build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
-            build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
+            build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.apk
+            build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.sha256
             build/full-badging.txt
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish Alpha 6 plus PS1 Input 2.0 prerelease
+      - name: Publish Alpha 6 plus PS1 Input 2.0 R2 prerelease
         shell: bash
         run: |
           set -euo pipefail
-          TAG=v0.11.6-ps1-input2
-          TITLE='OmniCore v0.11.6 — Alpha 6 + PS1 Input 2.0'
-          APK=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.apk
-          HASH=build/full/OmniCore-v0.11.6-ps1-input2-alpha6-full.sha256
-          NOTES='Built on the complete validated 0.11.5 PS2 Alpha 6 app. The unchanged third-party PS1/N64/PS2 payload is reused byte-for-byte from the signed Alpha 6 APK instead of recompiling PCSX2 for hours. OmniCore V4, Achievements, N64 and PS2 stay intact; PS1 gains Input 2.0, Smart Auto, tank assist, Compatibility 2.0, CUE/CCD/M3U, zero-copy-first multi-disc staging and disk control. VersionCode 47 updates over the accidental build 46 without uninstalling app data.'
+          TAG=v0.11.6-ps1-input2-r2
+          TITLE='OmniCore v0.11.6 — Alpha 6 + PS1 Input 2.0 R2'
+          APK=build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.apk
+          HASH=build/full/OmniCore-v0.11.6-ps1-input2-r2-alpha6-full.sha256
+          NOTES='Built on the complete validated 0.11.5 PS2 Alpha 6 app. R2 keeps OmniCore V4, Achievements, N64 and PS2 intact, fixes PS1 left-stick ownership so visual settings cannot block SMART Auto, migrates stale Alpha 6 per-game analog values, and replaces the drift-prone time-estimated tank steering with deterministic forward/back/turn combinations. VersionCode 48 updates directly over build 47 without uninstalling app data.'
           TARGET="$(git rev-parse HEAD)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
