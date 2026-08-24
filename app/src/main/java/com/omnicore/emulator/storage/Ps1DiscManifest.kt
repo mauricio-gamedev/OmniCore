@@ -101,7 +101,7 @@ object Ps1DiscManifest {
     }
 
     private fun inferDiscNumber(value: String): Int? {
-        DISC_TOKEN.find(value)?.groupValues?.getOrNull(2)?.toIntOrNull()?.let { return it }
+        DISC_TOKEN.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
         OF_TOKEN.find(value)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let { return it }
         return null
     }
