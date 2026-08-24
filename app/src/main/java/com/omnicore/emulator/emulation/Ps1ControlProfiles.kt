@@ -19,7 +19,7 @@ object Ps1ControlProfiles {
         val family: String
     )
 
-    fun recommend(title: String, fileName: String = ""): Recommendation {
+    fun recommend(title: String, fileName: String = "", dualShockEnabled: Boolean = false): Recommendation {
         val identity = normalize("$title $fileName")
 
         TANK_FAMILIES.firstOrNull { rule -> rule.tokens.any(identity::contains) }?.let { rule ->
@@ -30,12 +30,14 @@ object Ps1ControlProfiles {
             )
         }
 
-        NATIVE_FAMILIES.firstOrNull { rule -> rule.tokens.any(identity::contains) }?.let { rule ->
-            return Recommendation(
-                mode = InputSettings.AnalogMode.NATIVE,
-                confidence = Confidence.HIGH,
-                family = rule.name
-            )
+        if (dualShockEnabled) {
+            NATIVE_FAMILIES.firstOrNull { rule -> rule.tokens.any(identity::contains) }?.let { rule ->
+                return Recommendation(
+                    mode = InputSettings.AnalogMode.NATIVE,
+                    confidence = Confidence.HIGH,
+                    family = rule.name
+                )
+            }
         }
 
         // Preserve the old SMART behavior for everything we cannot identify with high
@@ -63,9 +65,9 @@ object Ps1ControlProfiles {
         FamilyRule("chaos-break", listOf("chaos break"))
     )
 
-    // Keep this list intentionally strict: Native means we stop projecting the left
-    // stick to the D-pad. Ape Escape is a safe first family because DualShock analog
-    // control is fundamental to its control scheme.
+    // Native profiles are considered only when the core is already configured as
+    // DualShock. This avoids making a digital-pad session unusable just because the
+    // title belongs to an analog-first family.
     private val NATIVE_FAMILIES = listOf(
         FamilyRule("ape-escape", listOf("ape escape", "saru get you", "sarugetchu"))
     )
