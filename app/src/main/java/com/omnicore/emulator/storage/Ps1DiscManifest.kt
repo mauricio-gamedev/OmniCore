@@ -13,7 +13,7 @@ object Ps1DiscManifest {
     data class Disc(
         val reference: String,
         val label: String? = null,
-        val discNumber: Int? = inferDiscNumber(reference)
+        val discNumber: Int? = null
     )
 
     data class Manifest(
@@ -50,7 +50,7 @@ object Ps1DiscManifest {
                 pendingLabel = null
                 return@forEachIndexed
             }
-            discs += Disc(reference = safe, label = pendingLabel)
+            discs += Disc(reference = safe, label = pendingLabel, discNumber = inferDiscNumber(safe))
             pendingLabel = null
         }
 
