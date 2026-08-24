@@ -1,25 +1,27 @@
 package com.omnicore.emulator.emulation
 
+import com.omnicore.emulator.core.nativebridge.NativeBridge
 import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * Modern steering layer for digital PS1 games with tank controls.
+ * Frontend for PS1 Modern Control Engine v2.
  *
- * A raw digital diagonal is too aggressive for an analog stick: holding UP+RIGHT in
- * a tank-control game means "turn right at full speed while moving forward". That is
- * why the previous deterministic mapping still felt awkward in Resident Evil, Tomb
- * Raider and similar games.
+ * Preferred path: publish continuous analog intent to the PS1 native host. The host
+ * filters and sigma-delta-modulates turn strength once per emulated frame immediately
+ * before retro_run(), so steering is independent from Android timer jitter.
  *
- * This resolver keeps forward/backward held, but converts horizontal stick strength
- * into short D-pad turn pulses. Small sideways deflection produces occasional gentle
- * correction; a large deflection produces longer pulses; near-horizontal input keeps
- * a normal full-speed turn in place. It never estimates character heading and never
- * reads game memory or changes core timing.
+ * Compatibility path: if the active runtime does not expose the native engine, keep
+ * the validated R3 millisecond PWM implementation. Touch/physical callers therefore
+ * do not need a second code path and legacy APK/runtime combinations fail gracefully.
  */
 internal class TankMovementAssist {
     private var targetX = 0f
     private var targetY = 0f
+    private var gestureActive = false
+    private var nativeDelegated = false
+
+    // R3 fallback state. It is dormant whenever nativeDelegated == true.
     private var movementActive = false
     private var pulseEpochMs = 0L
     private var lastTurnSign = 0
@@ -27,7 +29,9 @@ internal class TankMovementAssist {
 
     fun beginGesture(nowMs: Long) {
         reset()
+        gestureActive = true
         pulseEpochMs = nowMs
+        nativeDelegated = NativeBridge.setModernTankIntent(0f, 0f, active = true)
     }
 
     fun updateTarget(x: Float, y: Float) {
@@ -35,19 +39,34 @@ internal class TankMovementAssist {
         if (magnitude < INPUT_EPSILON) {
             targetX = 0f
             targetY = 0f
-            return
+        } else {
+            val scale = if (magnitude > 1f) 1f / magnitude else 1f
+            targetX = (x * scale).coerceIn(-1f, 1f)
+            targetY = (y * scale).coerceIn(-1f, 1f)
         }
-        val scale = if (magnitude > 1f) 1f / magnitude else 1f
-        targetX = (x * scale).coerceIn(-1f, 1f)
-        targetY = (y * scale).coerceIn(-1f, 1f)
+
+        if (gestureActive) {
+            // Retry delegation while a gesture is active. This covers the brief case
+            // where the overlay receives input before the native PS1 session finishes booting.
+            if (NativeBridge.setModernTankIntent(targetX, targetY, active = true)) {
+                nativeDelegated = true
+            }
+        }
     }
 
     fun step(nowMs: Long): Set<Int> {
+        // Native generated D-pad bits are OR'ed into the PS1 host input mask. Returning
+        // NONE here also clears any R3 fallback bits that may have existed before a
+        // late delegation succeeded.
+        if (nativeDelegated) return NONE
+        return fallbackStep(nowMs)
+    }
+
+    private fun fallbackStep(nowMs: Long): Set<Int> {
         val x = targetX
         val y = targetY
         val magnitude = hypot(x.toDouble(), y.toDouble()).toFloat()
 
-        // Schmitt deadzone avoids stop/start chatter when the thumb hovers near centre.
         if (!movementActive) {
             if (magnitude < TARGET_ENTER_DEADZONE) return NONE
             movementActive = true
@@ -67,8 +86,6 @@ internal class TankMovementAssist {
             else -> 0
         }
 
-        // A nearly horizontal stick means an intentional turn in place. Do not pulse
-        // here; the player expects immediate, full left/right rotation for alignment.
         if (turnSign != 0 && ax >= TURN_IN_PLACE_X && ay <= TURN_IN_PLACE_Y) {
             lastTurnSign = turnSign
             wasSteering = true
@@ -79,8 +96,6 @@ internal class TankMovementAssist {
         val moveSign = when {
             y <= -MOVE_AXIS_DEADZONE -> -1
             y >= MOVE_AXIS_DEADZONE -> 1
-            // When the stick is mostly vertical, preserve movement even if the value
-            // sits just below the normal threshold after touch deadzone remapping.
             ay >= ax * VERTICAL_DOMINANCE && y < 0f -> -1
             ay >= ax * VERTICAL_DOMINANCE && y > 0f -> 1
             else -> 0
@@ -95,34 +110,25 @@ internal class TankMovementAssist {
         }
 
         val moveButton = if (moveSign < 0) UP else DOWN
-
-        // Straight-forward cone. This is deliberately wider than a raw axis deadzone
-        // so natural thumb drift does not make the character snake through corridors.
         if (turnSign == 0 || ax <= STRAIGHT_STEER_DEADZONE || ax < ay * STRAIGHT_CONE_RATIO) {
             lastTurnSign = 0
             wasSteering = false
             return moveButton
         }
 
-        if (!wasSteering || turnSign != lastTurnSign) {
-            // Start every new steering correction with an active pulse. This keeps
-            // quick course corrections responsive instead of waiting for a PWM phase.
-            pulseEpochMs = nowMs
-        }
+        if (!wasSteering || turnSign != lastTurnSign) pulseEpochMs = nowMs
         wasSteering = true
         lastTurnSign = turnSign
 
         val normalized = ((ax - STRAIGHT_STEER_DEADZONE) / (1f - STRAIGHT_STEER_DEADZONE))
             .coerceIn(0f, 1f)
-        // Soft quadratic curve: centre = precise micro-correction, edge = strong turn.
         val curved = 0.32f * normalized + 0.68f * normalized * normalized
         val duty = (MIN_TURN_DUTY + (MAX_TURN_DUTY - MIN_TURN_DUTY) * curved)
             .coerceIn(MIN_TURN_DUTY, MAX_TURN_DUTY)
         val activeMs = (TURN_PULSE_PERIOD_MS * duty).toLong().coerceAtLeast(MIN_TURN_PULSE_MS)
         val phase = ((nowMs - pulseEpochMs).coerceAtLeast(0L) % TURN_PULSE_PERIOD_MS)
-        val turningNow = phase < activeMs
+        if (phase >= activeMs) return moveButton
 
-        if (!turningNow) return moveButton
         return when {
             moveSign < 0 && turnSign < 0 -> UP_LEFT
             moveSign < 0 && turnSign > 0 -> UP_RIGHT
@@ -132,8 +138,13 @@ internal class TankMovementAssist {
     }
 
     fun reset() {
+        if (gestureActive || nativeDelegated) {
+            NativeBridge.setModernTankIntent(0f, 0f, active = false)
+        }
         targetX = 0f
         targetY = 0f
+        gestureActive = false
+        nativeDelegated = false
         movementActive = false
         pulseEpochMs = 0L
         lastTurnSign = 0
