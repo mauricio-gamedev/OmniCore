@@ -3,11 +3,11 @@ package com.omnicore.emulator.storage
 import java.text.Normalizer
 
 /**
- * Multi-disc/playlist planning foundation for PS1.
+ * Multi-disc/playlist planning for PS1.
  *
- * This parser is intentionally not wired as a launchable format yet. The current
- * libretro frontend still declines the disk-control callback, so exposing M3U in the
- * library before disk switching is available would create a half-working feature.
+ * References are sanitized before Android staging. The runtime now exposes the
+ * libretro disk-control interface, so validated M3U sets can remain one library
+ * entry while the active disc is switched from the in-game Quick Menu.
  */
 object Ps1DiscManifest {
     data class Disc(
@@ -62,7 +62,7 @@ object Ps1DiscManifest {
     }
 
     /**
-     * Conservative helper for future folder auto-grouping. It does not mutate the
+     * Conservative helper for folder auto-grouping. It does not mutate the
      * library; it only reports candidates that clearly share a base title and disc number.
      */
     fun groupByDiscNumber(fileNames: List<String>): Map<String, List<Disc>> {
