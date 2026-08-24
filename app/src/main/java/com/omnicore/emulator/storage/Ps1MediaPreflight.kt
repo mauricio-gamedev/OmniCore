@@ -75,8 +75,10 @@ object Ps1MediaPreflight {
         if (offsets.any { it < PBP_HEADER_BYTES.toLong() }) {
             return Result(ok = false, error = "$name possui offsets PBP anteriores ao fim do cabeçalho.")
         }
-        if (offsets.zipWithNext().any { (a, c) -> c < a }) {
-            return Result(ok = false, error = "$name possui tabela de offsets PBP fora de ordem.")
+        for (index in 0 until offsets.lastIndex) {
+            if (offsets[index + 1] < offsets[index]) {
+                return Result(ok = false, error = "$name possui tabela de offsets PBP fora de ordem.")
+            }
         }
         val psarOffset = offsets.last()
         if (probe.size > 0L && psarOffset >= probe.size) {
