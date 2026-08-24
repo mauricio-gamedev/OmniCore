@@ -41,6 +41,19 @@ jobs:
           grep -q 'buttonPointerTargets' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
           grep -q 'dpadProjectionCache' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
 
+      - name: Guard Smart Auto control routing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
+          grep -q 'legacy-hybrid' app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
+          grep -q 'resident-evil' app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
+          grep -q 'ape-escape' app/src/main/java/com/omnicore/emulator/emulation/Ps1ControlProfiles.kt
+          grep -q 'applySmartAutoProfile' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'KEY_AUTO_ANALOG' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'Ps1ControlProfiles.recommend' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -q 'recommendation.mode' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+
       - name: Guard PS1 media compatibility contracts
         shell: bash
         run: |
