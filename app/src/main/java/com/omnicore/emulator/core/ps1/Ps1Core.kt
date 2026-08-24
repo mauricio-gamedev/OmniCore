@@ -43,9 +43,9 @@ class Ps1Core : EmulatorCore {
     }
 
     companion object {
-        // Keep the old single-file set unchanged so the current importer cannot
-        // expose IMG twice when a CCD/IMG/SUB folder is selected. CCD becomes an
-        // importable primary only after Ps1MediaLayout is wired into the UI.
+        // Preserve the legacy standalone contract exactly. Descriptor-based media
+        // is separate so the Ps1MediaLayout importer can keep CUE/BIN and
+        // CCD/IMG/SUB grouped instead of exposing their tracks as duplicate games.
         val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe")
         val DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd")
         val SUPPORTED_EXTENSIONS = SINGLE_FILE_EXTENSIONS + DESCRIPTOR_EXTENSIONS
