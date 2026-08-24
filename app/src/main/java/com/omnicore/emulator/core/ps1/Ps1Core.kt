@@ -34,11 +34,19 @@ class Ps1Core : EmulatorCore {
                 "Este CUE precisa das faixas BIN. Importe a pasta do jogo ou selecione CUE + BIN juntos."
             }
         }
+        if (extension == "ccd") {
+            require(!game.folderUri.isNullOrBlank() || game.companionUris.isNotEmpty()) {
+                "Este CCD precisa do IMG correspondente. Importe a pasta completa do jogo para manter CCD/IMG/SUB juntos."
+            }
+        }
         context.startActivity(EmulationActivity.intent(context, game, extension))
     }
 
     companion object {
-        val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe")
+        // CCD is accepted as a library primary so the existing folder importer can
+        // surface the set. The runtime never treats it as a true standalone image:
+        // EmulationActivity stages the matching IMG and optional SUB/SBI together.
+        val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe", "ccd")
         val SUPPORTED_EXTENSIONS = SINGLE_FILE_EXTENSIONS + "cue"
     }
 }
