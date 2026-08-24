@@ -1,0 +1,175 @@
+name: OmniCore 0.11.5 Full Recovery APK
+
+on:
+  push:
+    branches: [ "agent/recovery-0.11.5-full" ]
+    paths:
+      - ".github/workflows/recovery-0.11.5-full.yml"
+      - "app/build.gradle.kts"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: omnicore-full-recovery-0115
+  cancel-in-progress: true
+
+jobs:
+  build-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout exact full-feature recovery branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/recovery-0.11.5-full
+          fetch-depth: 0
+
+      - name: Verify full 0.11.5 feature baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'versionCode = 47' app/build.gradle.kts
+          grep -Fq 'versionName = "0.11.5-recovery1"' app/build.gradle.kts
+          test -d app/src/main/java/com/omnicore/emulator/achievements
+          test -d app/src/main/java/com/omnicore/emulator/core/n64
+          test -d app/src/main/java/com/omnicore/emulator/core/ps2
+          test -f app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt
+          grep -Fq 'class Pcsx2PS2Backend' app/src/main/java/com/omnicore/emulator/core/ps2/Pcsx2PS2Backend.kt
+          grep -Fq '7f0ae7a6c689b5b36eccc61b7adb480f65c7a3a3' config/ps2-pcsx2-pin.txt
+          echo 'FULL_FEATURE_BASELINE_OK'
+
+      - name: Verify Android toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          if ! test -d "$NDK"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
+          fi
+          if ! test -d "$ANDROID_SDK_ROOT/platforms/android-36"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36'
+          fi
+          echo "OMNI_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Prepare stable DEV signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/signing
+          base64 -d config/omnicore-dev.keystore.b64 > build/signing/omnicore-dev.jks
+          chmod 600 build/signing/omnicore-dev.jks
+          echo "OMNICORE_DEV_KEYSTORE=$GITHUB_WORKSPACE/build/signing/omnicore-dev.jks" >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_STORE_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_ALIAS=omnicore-dev' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+
+      - name: Build PS1 and N64 cores
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$OMNI_NDK_HOME"
+          chmod +x tools/fetch_ps1_core.sh tools/build_ps1_core_android.sh tools/fetch_n64_core.sh tools/build_n64_core_android.sh
+          tools/fetch_ps1_core.sh
+          tools/build_ps1_core_android.sh
+          tools/fetch_n64_core.sh
+          tools/build_n64_core_android.sh
+          for ABI in arm64-v8a armeabi-v7a; do
+            test -s "app/src/main/jniLibs/$ABI/libpcsx_rearmed_libretro.so"
+            test -s "app/src/main/jniLibs/$ABI/libmupen64plus_next_libretro.so"
+          done
+
+      - name: Build pinned PCSX2 ARM64 backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$OMNI_NDK_HOME"
+          chmod +x tools/fetch_ps2_pcsx2_backend.sh tools/build_ps2_pcsx2_backend_android.sh
+          tools/fetch_ps2_pcsx2_backend.sh
+          test "$(git -C build/third_party/armsx2 rev-parse HEAD)" = '7f0ae7a6c689b5b36eccc61b7adb480f65c7a3a3'
+          tools/build_ps2_pcsx2_backend_android.sh
+          test -s app/src/main/jniLibs/arm64-v8a/libemucore_4k.so
+          test -s app/src/main/jniLibs/arm64-v8a/libemucore_16k.so
+          test -n "$(find app/src/main/assets/pcsx2/resources -type f -print -quit)"
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleRelease --stacktrace --no-daemon
+          test -s app/build/outputs/apk/release/app-release.apk
+
+      - name: Verify recovery APK identity and installability
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          READELF="$OMNI_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
+          unzip -tqq "$APK"
+          "$AAPT" dump badging "$APK" | tee build/recovery-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='47' versionName='0.11.5-recovery1'" build/recovery-badging.txt
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/recovery-cert.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/recovery-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED"
+          CHECK=build/recovery-apk-unpack
+          rm -rf "$CHECK" && mkdir -p "$CHECK"
+          unzip -q "$APK" -d "$CHECK"
+          test -f "$CHECK/lib/arm64-v8a/libpcsx_rearmed_libretro.so"
+          test -f "$CHECK/lib/arm64-v8a/libmupen64plus_next_libretro.so"
+          test -f "$CHECK/lib/arm64-v8a/libemucore_4k.so"
+          test -f "$CHECK/lib/arm64-v8a/libemucore_16k.so"
+          while IFS= read -r -d '' SO; do
+            while IFS= read -r LOAD; do
+              A="$(awk '{print $NF}' <<< "$LOAD")"
+              [[ "$A" =~ ^0x[0-9A-Fa-f]+$ ]] || exit 1
+              (( A >= 0x4000 )) || { echo "ELF below 16KB alignment: $SO :: $LOAD" >&2; exit 1; }
+            done < <("$READELF" -lW "$SO" | grep -E '^[[:space:]]*LOAD[[:space:]]')
+          done < <(find "$CHECK/lib" -type f -name '*.so' -print0)
+          "$ZIPALIGN" -v -c -P 16 4 "$APK"
+
+      - name: Package recovery APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/recovery
+          OUT=build/recovery/OmniCore-v0.11.5-recovery1-full.apk
+          cp app/build/outputs/apk/release/app-release.apk "$OUT"
+          sha256sum "$OUT" > build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
+
+      - name: Upload recovery artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniCore-v0.11.5-recovery1-full
+          path: |
+            build/recovery/OmniCore-v0.11.5-recovery1-full.apk
+            build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
+            build/recovery-badging.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish recovery prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=v0.11.5-recovery1
+          TITLE='OmniCore v0.11.5 Full Recovery — build 47'
+          APK=build/recovery/OmniCore-v0.11.5-recovery1-full.apk
+          HASH=build/recovery/OmniCore-v0.11.5-recovery1-full.sha256
+          NOTES='Recovery build made from the exact validated 0.11.5 PS2 Alpha 6 source baseline (commit 308ea7a), preserving Achievements, N64, PS2, PS1, OmniCore V4 UI and the stable DEV signer. Only the Android version was raised to build 47 so it can replace the accidental build 46 without uninstalling or wiping app data.'
+          TARGET="$(git rev-parse HEAD)"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES" --prerelease --target "$TARGET"
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TITLE" --notes "$NOTES" --prerelease
+          fi
+          gh release upload "$TAG" "$APK" "$HASH" build/recovery-badging.txt --repo "$GITHUB_REPOSITORY" --clobber
