@@ -100,6 +100,18 @@ object NativeBridge {
         runCatching { nativeSetAnalog(stick, sx, sy) }
     }
 
+    /**
+     * Publishes player intent to the PS1-only frame-synchronous modern-control layer.
+     * False means the active runtime does not expose that layer, so callers may keep
+     * their legacy Kotlin fallback. Other console runtimes never receive this signal.
+     */
+    fun setModernTankIntent(x: Float, y: Float, active: Boolean): Boolean {
+        if (!loaded) return false
+        val sx = (x.coerceIn(-1f, 1f) * 32767f).toInt()
+        val sy = (y.coerceIn(-1f, 1f) * 32767f).toInt()
+        return runCatching { nativeSetModernTankIntent(sx, sy, active) }.getOrDefault(false)
+    }
+
     fun saveState(slot: Int = 0) {
         if (loaded) runCatching { nativeSaveState(slot.coerceIn(0, 9)) }
     }
@@ -206,6 +218,7 @@ object NativeBridge {
     private external fun nativeIsRunning(): Boolean
     private external fun nativeSetButton(id: Int, pressed: Boolean)
     private external fun nativeSetAnalog(stick: Int, x: Int, y: Int)
+    private external fun nativeSetModernTankIntent(x: Int, y: Int, active: Boolean): Boolean
     private external fun nativeSaveState(slot: Int)
     private external fun nativeLoadState(slot: Int)
     private external fun nativeResetCheats()
