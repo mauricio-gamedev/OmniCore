@@ -69,6 +69,7 @@ import com.omnicore.emulator.settings.Ps1Settings
 import com.omnicore.emulator.storage.GameLibraryStore
 import com.omnicore.emulator.storage.Ps1Files
 import com.omnicore.emulator.storage.Ps1MediaLayout
+import com.omnicore.emulator.storage.Ps1PlaylistMedia
 import com.omnicore.emulator.storage.SafGameSource
 import com.omnicore.emulator.update.UpdateManager
 import java.util.UUID
@@ -159,6 +160,37 @@ fun OmniCoreV3App() {
         return true
     }
 
+    fun importPs1Playlists(
+        playlists: List<SafGameSource.Document>,
+        documents: List<SafGameSource.Document>,
+        folderUri: String? = null,
+        sourceLabel: String
+    ): Boolean {
+        if (playlists.isEmpty()) return false
+        val additions = mutableListOf<GameEntry>()
+        playlists.forEach { playlist ->
+            val plan = Ps1PlaylistMedia.plan(context, playlist, documents).getOrElse { error ->
+                message = "${playlist.name}: ${error.message ?: "playlist multi-disc inválida"}"
+                return true
+            }
+            additions += GameEntry(
+                id = UUID.randomUUID().toString(),
+                title = playlist.name.substringBeforeLast('.', playlist.name),
+                fileName = playlist.name,
+                uri = playlist.uri.toString(),
+                system = ConsoleSystem.PLAYSTATION_1,
+                sizeBytes = plan.stagingDocuments.distinctBy { it.uri.toString() }.sumOf { it.sizeBytes },
+                folderUri = folderUri,
+                companionUris = if (folderUri == null) plan.stagingDocuments.map { it.uri.toString() } else emptyList()
+            )
+        }
+        persist(
+            additions,
+            "$sourceLabel: ${additions.size} jogo(s) multi-disc adicionado(s). A troca de disco ficará no Quick Menu durante a partida."
+        )
+        return true
+    }
+
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         uris.forEach { uri ->
@@ -167,6 +199,9 @@ fun OmniCoreV3App() {
             }
         }
         val docs = uris.map { SafGameSource.metadata(context, it) }
+        if (importPs1Playlists(docs.filter { it.extension == "m3u" }, docs, sourceLabel = "Seleção PS1")) {
+            return@rememberLauncherForActivityResult
+        }
         val hasPs1Descriptor = docs.any { it.extension in Ps1Core.DESCRIPTOR_EXTENSIONS }
         if (filter == ConsoleSystem.PLAYSTATION_1 || hasPs1Descriptor) {
             importPs1Plan(Ps1MediaLayout.plan(docs), sourceLabel = "Seleção PS1")
@@ -199,6 +234,14 @@ fun OmniCoreV3App() {
             SafGameSource.listDirectChildren(context, treeUri).filterNot { it.isDirectory }
         }.getOrElse {
             message = it.message ?: "Não consegui ler a pasta selecionada."
+            return@rememberLauncherForActivityResult
+        }
+        if (importPs1Playlists(
+                playlists = docs.filter { it.extension == "m3u" },
+                documents = docs,
+                folderUri = treeUri.toString(),
+                sourceLabel = "Pasta PS1"
+            )) {
             return@rememberLauncherForActivityResult
         }
         importPs1Plan(

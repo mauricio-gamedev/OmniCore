@@ -38,6 +38,8 @@ import com.omnicore.emulator.settings.Ps1Settings
 import com.omnicore.emulator.storage.Ps1Files
 import com.omnicore.emulator.storage.Ps1BiosHealth
 import com.omnicore.emulator.storage.Ps1MediaLayout
+import com.omnicore.emulator.storage.Ps1PlaylistMedia
+import com.omnicore.emulator.storage.Ps1DiscManifest
 import com.omnicore.emulator.storage.SafGameSource
 import java.io.File
 import java.security.MessageDigest
@@ -272,6 +274,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
         statusView.text = when (extension) {
             "cue" -> "PREP 1/3 • lendo CUE e faixas…"
             "ccd" -> "PREP 1/3 • lendo CCD e imagem…"
+            "m3u" -> "PREP 1/3 • lendo playlist multi-disc…"
             else -> "PREP 1/3 • abrindo $gameTitle…"
         }
         preparationThread = Thread({
@@ -306,6 +309,7 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             when (extension) {
                 "cue" -> prepareCueSession(uri, folderUri, companionUris)
                 "ccd" -> prepareCcdSession(uri, folderUri, companionUris)
+                "m3u" -> prepareM3uSession(uri, folderUri, companionUris)
                 else -> prepareSingleFileSession(uri, extension)
             }
         }
@@ -434,6 +438,108 @@ class EmulationActivity : Activity(), SurfaceHolder.Callback {
             runCatching { dir.deleteRecursively() }
             throw error
         }
+    }
+
+    private fun prepareM3uSession(m3uUri: Uri, folderUri: Uri?, companionUris: List<Uri>): PreparedContent {
+        val descriptors = mutableListOf<ParcelFileDescriptor>()
+        val dir = m3uCacheDir()
+        return try {
+            ensurePreparationActive()
+            val sources = if (folderUri != null) {
+                SafGameSource.listDirectChildren(this, folderUri).filterNot { it.isDirectory }
+            } else {
+                (companionUris + m3uUri).distinctBy(Uri::toString).map { SafGameSource.metadata(this, it) }
+            }
+            val playlist = sources.firstOrNull { it.uri.toString() == m3uUri.toString() }
+                ?: SafGameSource.metadata(this, m3uUri)
+            val plan = Ps1PlaylistMedia.plan(this, playlist, sources).getOrThrow()
+            val playlistText = Ps1PlaylistMedia.readText(this, m3uUri)
+            val fingerprint = cueFingerprint(playlistText, plan.stagingDocuments)
+            val marker = File(dir, ".source-fingerprint")
+            val localM3u = File(dir, "game.m3u")
+
+            val cacheValid = runCatching {
+                marker.isFile && marker.readText(Charsets.UTF_8) == fingerprint &&
+                    localM3u.isFile && localM3u.length() > 0L &&
+                    validateM3uSession(localM3u).let { true }
+            }.getOrDefault(false)
+            if (cacheValid) {
+                statusView.post { statusView.text = "PREP 2/3 • cache multi-disc validado — início rápido" }
+                return PreparedContent(localM3u.absolutePath, emptyList(), dir, persistent = true)
+            }
+
+            runCatching { dir.deleteRecursively() }
+            require(dir.mkdirs() || dir.isDirectory) { "Não consegui criar o cache multi-disc." }
+            statusView.post {
+                statusView.text = "PREP 2/3 • preparando ${plan.manifest.discs.size} discos pela primeira vez…"
+            }
+
+            val payload = plan.stagingDocuments.filterNot { it.uri.toString() == m3uUri.toString() }
+            val duplicateNames = payload.groupBy { safeFileName(it.name).lowercase() }
+                .filterValues { docs -> docs.map { it.uri.toString() }.distinct().size > 1 }
+            require(duplicateNames.isEmpty()) {
+                "A playlist contém arquivos diferentes com o mesmo nome local: ${duplicateNames.keys.first()}."
+            }
+
+            payload.forEach { source ->
+                ensurePreparationActive()
+                stageDocument(source.uri, File(dir, safeFileName(source.name)), descriptors, forceCopy = true)
+            }
+
+            val rewritten = buildString {
+                plan.manifest.discs.forEachIndexed { index, disc ->
+                    disc.label?.takeIf { it.isNotBlank() }?.let { label ->
+                        append("#EXTINF:-1,")
+                            .append(label.replace('\r', ' ').replace('\n', ' '))
+                            .append('\n')
+                    }
+                    append(safeFileName(plan.discDocuments[index].name)).append('\n')
+                }
+            }
+            localM3u.writeText(rewritten, Charsets.UTF_8)
+            validateM3uSession(localM3u)
+            marker.writeText(fingerprint, Charsets.UTF_8)
+            ensurePreparationActive()
+            PreparedContent(localM3u.absolutePath, descriptors.toList(), dir, persistent = true)
+        } catch (error: Throwable) {
+            descriptors.forEach { runCatching { it.close() } }
+            runCatching { dir.deleteRecursively() }
+            throw error
+        }
+    }
+
+    private fun validateM3uSession(m3uFile: File) {
+        require(m3uFile.isFile && m3uFile.length() > 0L) { "A playlist M3U local ficou indisponível." }
+        val manifest = Ps1DiscManifest.parseM3u(m3uFile.readText(Charsets.UTF_8))
+        require(manifest.discs.size >= 2) { "A playlist local ficou sem pelo menos dois discos válidos." }
+        manifest.discs.forEach { disc ->
+            ensurePreparationActive()
+            require('/' !in disc.reference && '\\' !in disc.reference) { "Referência insegura no M3U local: ${disc.reference}" }
+            val image = File(m3uFile.parentFile, disc.reference)
+            require(image.parentFile?.canonicalFile == m3uFile.parentFile?.canonicalFile) {
+                "Referência externa no M3U local: ${disc.reference}"
+            }
+            require(image.isFile && image.length() > 0L) { "O disco '${disc.reference}' não ficou disponível no cache." }
+            when (image.extension.lowercase()) {
+                "cue" -> validateCueSession(image)
+                "ccd" -> validateCcdSession(image)
+                else -> runCatching {
+                    java.io.RandomAccessFile(image, "r").use { file ->
+                        val length = file.length()
+                        require(length > 0L)
+                        file.seek((length - 1L).coerceAtLeast(0L))
+                        require(file.read() >= 0)
+                    }
+                }.getOrElse {
+                    error("O disco '${disc.reference}' não aceita leitura aleatória necessária para emulação de CD.")
+                }
+            }
+        }
+    }
+
+    private fun m3uCacheDir(): File {
+        val safeKey = gameKey.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        return File(cacheDir, "ps1-disc-cache/$safeKey-multidisc")
     }
 
     private fun cueCacheDir(): File {
