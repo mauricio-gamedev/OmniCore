@@ -56,9 +56,22 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --name OmniCore-PS1-Input2-Compatibility2 \
             --dir build/release
-          test -f build/release/OmniCore-PS1-Input2-Compatibility2-debug.apk
-          test -f build/release/OmniCore-PS1-Input2-Compatibility2-debug.sha256
-          (cd build/release && sha256sum -c OmniCore-PS1-Input2-Compatibility2-debug.sha256)
+
+          APK="build/release/OmniCore-PS1-Input2-Compatibility2-debug.apk"
+          SHA_FILE="build/release/OmniCore-PS1-Input2-Compatibility2-debug.sha256"
+          test -f "$APK"
+          test -f "$SHA_FILE"
+
+          EXPECTED_SHA="$(awk 'NR==1 {print $1}' "$SHA_FILE" | tr '[:upper:]' '[:lower:]')"
+          ACTUAL_SHA="$(sha256sum "$APK" | awk '{print $1}' | tr '[:upper:]' '[:lower:]')"
+          test "${#EXPECTED_SHA}" -eq 64
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "ERROR: APK SHA-256 mismatch" >&2
+            echo "expected: $EXPECTED_SHA" >&2
+            echo "actual:   $ACTUAL_SHA" >&2
+            exit 1
+          fi
+          echo "APK checksum verified: $ACTUAL_SHA"
 
       - name: Publish test release
         shell: bash
