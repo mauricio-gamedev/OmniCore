@@ -92,6 +92,19 @@ class GamepadOverlayView(context: Context) : View(context) {
     private var analogPointerId = -1
     private var lastAnalogX = Float.NaN
     private var lastAnalogY = Float.NaN
+    private val tankAssist = TankMovementAssist()
+    private var tankAssistLoopRunning = false
+    private val tankAssistRunnable = object : Runnable {
+        override fun run() {
+            if (!tankAssistLoopRunning) return
+            if (!isAttachedToWindow || analogPointerId == -1 || config.analogMode != InputSettings.AnalogMode.TANK_ASSIST) {
+                stopTankAssistLoop(clearButtons = config.analogMode == InputSettings.AnalogMode.TANK_ASSIST)
+                return
+            }
+            applyTankAssistFrame()
+            postOnAnimation(this)
+        }
+    }
 
     private var editMode = false
     private var editPointerId = -1
@@ -172,6 +185,7 @@ class GamepadOverlayView(context: Context) : View(context) {
         removeCallbacks(fadeRunnable)
         removeCallbacks(legacyStatusGuard)
         removeCallbacks(cheatApplyGuard)
+        stopTankAssistLoop(clearButtons = true)
         super.onDetachedFromWindow()
     }
 
@@ -466,6 +480,10 @@ class GamepadOverlayView(context: Context) : View(context) {
                 if (analogPointerId == -1 && insideAnalog(x, y, 1.55f)) {
                     analogPointerId = pointerId
                     buttonPointerTargets.delete(pointerId)
+                    if (config.analogMode == InputSettings.AnalogMode.TANK_ASSIST) {
+                        tankAssist.beginGesture(SystemClock.uptimeMillis())
+                        ensureTankAssistLoop()
+                    }
                     if (config.haptics) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 } else {
                     findButtonAt(x, y, 1.34f)?.let { region ->
@@ -477,6 +495,7 @@ class GamepadOverlayView(context: Context) : View(context) {
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val pointerId = event.getPointerId(event.actionIndex)
                 if (pointerId == analogPointerId) {
+                    if (config.analogMode == InputSettings.AnalogMode.TANK_ASSIST) stopTankAssistLoop(clearButtons = true)
                     analogPointerId = -1
                     updateAnalog(analogCx, analogCy)
                 }
@@ -485,6 +504,7 @@ class GamepadOverlayView(context: Context) : View(context) {
             MotionEvent.ACTION_CANCEL -> {
                 buttonPointerTargets.clear()
                 regionPressed = emptySet()
+                if (config.analogMode == InputSettings.AnalogMode.TANK_ASSIST) stopTankAssistLoop(clearButtons = true)
                 analogPointerId = -1
                 updateAnalog(analogCx, analogCy)
             }
@@ -677,8 +697,33 @@ class GamepadOverlayView(context: Context) : View(context) {
         val enabled = CheatStore.load(context, gameKey).count { it.enabled }
         AlertDialog.Builder(context)
             .setTitle(gameTitle)
-            .setMessage("${NativeBridge.lastMessage()}\n\nPreset: ${config.overlayPreset.label}\nCheats ativos: $enabled")
+            .setMessage("${NativeBridge.lastMessage()}\n\nPreset: ${config.overlayPreset.label}\nControle: ${config.analogMode.label}\nCheats ativos: $enabled")
+            .setNeutralButton("Controle") { _, _ -> showControlDialog() }
             .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showControlDialog() {
+        val modes = InputSettings.AnalogMode.entries
+        val selected = modes.indexOf(config.analogMode).coerceAtLeast(0)
+        AlertDialog.Builder(context)
+            .setTitle("Controle • $gameTitle")
+            .setSingleChoiceItems(modes.map { "${it.label} — ${it.subtitle}" }.toTypedArray(), selected) { dialog, which ->
+                releaseAll()
+                InputSettings.saveGameAnalogMode(context, gameKey, modes[which])
+                config = InputSettings.resolveForGame(context, gameKey)
+                tankAssist.reset()
+                dialog.dismiss()
+                showToast("${config.analogMode.label} aplicado só a este jogo")
+            }
+            .setNeutralButton("Herdar global") { _, _ ->
+                releaseAll()
+                InputSettings.clearGameAnalogMode(context, gameKey)
+                config = InputSettings.resolveForGame(context, gameKey)
+                tankAssist.reset()
+                showToast("Controle deste jogo voltou ao padrão global")
+            }
+            .setNegativeButton("Cancelar", null)
             .show()
     }
 
@@ -930,6 +975,8 @@ class GamepadOverlayView(context: Context) : View(context) {
     override fun performClick(): Boolean { super.performClick(); return true }
 
     fun releaseAll() {
+        stopTankAssistLoop(clearButtons = false)
+        tankAssist.reset()
         buttonPointerTargets.clear()
         regionPressed = emptySet()
         analogDpadPressed = emptySet()
@@ -978,6 +1025,17 @@ class GamepadOverlayView(context: Context) : View(context) {
                 if (analogChanged) NativeBridge.setAnalog(0, dx, dy)
                 dpadProjection(dx, dy)
             }
+            InputSettings.AnalogMode.TANK_ASSIST -> {
+                if (analogChanged) NativeBridge.setAnalog(0, 0f, 0f)
+                tankAssist.updateTarget(dx, dy)
+                if (analogPointerId != -1) {
+                    ensureTankAssistLoop()
+                    tankAssist.step(SystemClock.uptimeMillis())
+                } else {
+                    tankAssist.reset()
+                    emptySet()
+                }
+            }
         }
         if (nextDigital != analogDpadPressed) {
             analogDpadPressed = nextDigital
@@ -986,6 +1044,30 @@ class GamepadOverlayView(context: Context) : View(context) {
         lastAnalogX = dx
         lastAnalogY = dy
         scheduleRedraw()
+    }
+
+    private fun ensureTankAssistLoop() {
+        if (tankAssistLoopRunning || analogPointerId == -1 || config.analogMode != InputSettings.AnalogMode.TANK_ASSIST) return
+        tankAssistLoopRunning = true
+        postOnAnimation(tankAssistRunnable)
+    }
+
+    private fun applyTankAssistFrame() {
+        val next = tankAssist.step(SystemClock.uptimeMillis())
+        if (next != analogDpadPressed) {
+            analogDpadPressed = next
+            commitButtons()
+        }
+    }
+
+    private fun stopTankAssistLoop(clearButtons: Boolean) {
+        tankAssistLoopRunning = false
+        removeCallbacks(tankAssistRunnable)
+        tankAssist.reset()
+        if (clearButtons && analogDpadPressed.isNotEmpty()) {
+            analogDpadPressed = emptySet()
+            commitButtons()
+        }
     }
 
     private fun dpadProjection(x: Float, y: Float): Set<Int> {

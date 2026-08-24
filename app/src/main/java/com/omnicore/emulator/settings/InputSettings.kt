@@ -6,7 +6,8 @@ object InputSettings {
     enum class AnalogMode(val storage: String, val label: String, val subtitle: String) {
         SMART("smart", "Inteligente", "Analógico nativo + D-pad para jogos antigos"),
         NATIVE("native", "Nativo", "Envia somente eixos analógicos DualShock"),
-        DPAD("dpad", "D-pad", "Stick touch funciona como direcional digital")
+        DPAD("dpad", "D-pad", "Stick touch funciona como direcional digital"),
+        TANK_ASSIST("tank_assist", "Movimento moderno", "Stick vira intenção de direção para jogos com controle tank")
     }
 
     enum class OverlayPreset(val storage: String, val label: String, val subtitle: String) {
@@ -135,6 +136,12 @@ object InputSettings {
     }
 
     fun saveAnalogMode(context: Context, mode: AnalogMode) { edit(context).putString(KEY_ANALOG_MODE, mode.storage).apply() }
+    fun saveGameAnalogMode(context: Context, gameKey: String, mode: AnalogMode) {
+        edit(context).putString(gamePrefix(gameKey) + KEY_ANALOG_MODE, mode.storage).apply()
+    }
+    fun clearGameAnalogMode(context: Context, gameKey: String) {
+        edit(context).remove(gamePrefix(gameKey) + KEY_ANALOG_MODE).apply()
+    }
     fun saveTouchOpacity(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_OPACITY, value.coerceIn(0.35f, 1f)).apply() }
     fun saveTouchScale(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_SCALE, value.coerceIn(0.80f, 1.20f)).apply() }
     fun saveHaptics(context: Context, enabled: Boolean) { edit(context).putBoolean(KEY_HAPTICS, enabled).apply() }
