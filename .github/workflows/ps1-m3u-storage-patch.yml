@@ -5,6 +5,7 @@ on:
     branches: [ "agent/ps1-input2-compat" ]
     paths:
       - "tools/patch_ps1_m3u_storage.py"
+      - ".github/workflows/ps1-m3u-storage-patch.yml"
   workflow_dispatch:
 
 permissions:
