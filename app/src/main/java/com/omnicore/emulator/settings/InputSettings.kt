@@ -40,6 +40,7 @@ object InputSettings {
     private const val PREFS = "input_settings"
     private const val KEY_ANALOG_MODE = "analog_mode"
     private const val KEY_AUTO_ANALOG = "auto_analog_profile"
+    private const val KEY_MANUAL_ANALOG = "manual_analog_profile"
     private const val KEY_TOUCH_OPACITY = "touch_opacity"
     private const val KEY_TOUCH_SCALE = "touch_scale"
     private const val KEY_HAPTICS = "haptics"
@@ -109,10 +110,14 @@ object InputSettings {
         )
     }
 
+    /**
+     * Persists only visual/layout state. Control ownership is intentionally handled by
+     * saveGameAnalogMode/clearGameAnalogMode so changing opacity or layout cannot freeze
+     * a stale analog mode and block SMART Auto on the next launch.
+     */
     fun saveGameConfig(context: Context, gameKey: String, config: Config) {
         val prefix = gamePrefix(gameKey)
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(prefix + KEY_ANALOG_MODE, config.analogMode.storage)
             .putFloat(prefix + KEY_TOUCH_OPACITY, config.touchOpacity.coerceIn(0.35f, 1f))
             .putFloat(prefix + KEY_TOUCH_SCALE, config.touchScale.coerceIn(0.80f, 1.20f))
             .putBoolean(prefix + KEY_HAPTICS, config.haptics)
@@ -137,58 +142,63 @@ object InputSettings {
     }
 
     /**
-     * Applies a high-confidence SMART recommendation without taking ownership away
-     * from the user. Manual per-game modes always win. Auto-owned entries are marked
-     * so a later database update can safely refresh or remove only our own choice.
+     * Applies a SMART recommendation while keeping explicit Input 2.0 manual choices
+     * authoritative. Alpha 6 did not have a manual-ownership marker and its visual
+     * editor used to write analog_mode as a side effect, so stale legacy values are
+     * migrated back under SMART ownership once. After the user explicitly chooses a
+     * per-game mode in Input 2.0, KEY_MANUAL_ANALOG prevents future auto overrides.
      */
     fun applySmartAutoProfile(context: Context, gameKey: String, recommendation: AnalogMode) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val prefix = gamePrefix(gameKey)
         val modeKey = prefix + KEY_ANALOG_MODE
         val autoKey = prefix + KEY_AUTO_ANALOG
+        val manualKey = prefix + KEY_MANUAL_ANALOG
         val globalMode = resolve(context).analogMode
-        val hasMode = prefs.contains(modeKey)
-        val storedMode = AnalogMode.entries.firstOrNull { it.storage == prefs.getString(modeKey, null) }
         val autoOwned = prefs.getBoolean(autoKey, false)
+        val manualOwned = prefs.getBoolean(manualKey, false)
 
-        // If the user leaves SMART globally, previously auto-owned entries must stop
-        // overriding that new global choice. Manual per-game entries remain untouched.
-        if (globalMode != AnalogMode.SMART && autoOwned) {
-            prefs.edit().remove(modeKey).remove(autoKey).apply()
+        if (globalMode != AnalogMode.SMART) {
+            if (autoOwned) prefs.edit().remove(modeKey).remove(autoKey).apply()
             return
         }
 
-        val eligible = autoOwned || !hasMode || storedMode == AnalogMode.SMART
-        if (!eligible) return
+        if (manualOwned) return
 
         if (recommendation == AnalogMode.SMART) {
             if (autoOwned) prefs.edit().remove(modeKey).remove(autoKey).apply()
             return
         }
 
-        if (globalMode == AnalogMode.SMART || storedMode == AnalogMode.SMART || autoOwned) {
-            prefs.edit()
-                .putString(modeKey, recommendation.storage)
-                .putBoolean(autoKey, true)
-                .apply()
-        }
+        // SMART owns known-game recommendations. This also repairs stale Alpha 6
+        // per-game analog values that were written merely by editing visual settings.
+        prefs.edit()
+            .putString(modeKey, recommendation.storage)
+            .putBoolean(autoKey, true)
+            .remove(manualKey)
+            .apply()
     }
 
     fun saveAnalogMode(context: Context, mode: AnalogMode) { edit(context).putString(KEY_ANALOG_MODE, mode.storage).apply() }
+
     fun saveGameAnalogMode(context: Context, gameKey: String, mode: AnalogMode) {
         val prefix = gamePrefix(gameKey)
         edit(context)
             .putString(prefix + KEY_ANALOG_MODE, mode.storage)
+            .putBoolean(prefix + KEY_MANUAL_ANALOG, true)
             .remove(prefix + KEY_AUTO_ANALOG)
             .apply()
     }
+
     fun clearGameAnalogMode(context: Context, gameKey: String) {
         val prefix = gamePrefix(gameKey)
         edit(context)
             .remove(prefix + KEY_ANALOG_MODE)
             .remove(prefix + KEY_AUTO_ANALOG)
+            .remove(prefix + KEY_MANUAL_ANALOG)
             .apply()
     }
+
     fun saveTouchOpacity(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_OPACITY, value.coerceIn(0.35f, 1f)).apply() }
     fun saveTouchScale(context: Context, value: Float) { edit(context).putFloat(KEY_TOUCH_SCALE, value.coerceIn(0.80f, 1.20f)).apply() }
     fun saveHaptics(context: Context, enabled: Boolean) { edit(context).putBoolean(KEY_HAPTICS, enabled).apply() }
