@@ -12,8 +12,10 @@ on:
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1MediaPreflight.kt"
       - "app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/Ps1PlaylistMedia.kt"
       - "app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt"
       - "tools/patch_ps1_ui_disk.py"
+      - "tools/patch_ps1_m3u_runtime.py"
       - ".github/workflows/ps1-input2-ci.yml"
   workflow_dispatch:
 
@@ -68,7 +70,7 @@ jobs:
           grep -q 'CCD_SET' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'arquivo IMG correspondente não encontrado' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
           grep -q 'vários BIN sem CUE' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaLayout.kt
-          grep -q 'DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd")' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -q 'DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd", "m3u")' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
           grep -q 'prepareCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
           grep -q 'validateCcdSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
           grep -q 'Ps1MediaLayout.plan' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
@@ -76,7 +78,7 @@ jobs:
           grep -q 'Ps1MediaLayout.plan(docs)' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
           grep -q 'CCD/IMG/SUB' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
 
-      - name: Guard Compatibility 2.0 preflight and multi-disc gate
+      - name: Guard Compatibility 2.0 preflight and active multi-disc
         shell: bash
         run: |
           set -euo pipefail
@@ -86,10 +88,15 @@ jobs:
           grep -q 'DATA.PSAR' app/src/main/java/com/omnicore/emulator/storage/Ps1MediaPreflight.kt
           grep -q 'Ps1MediaPreflight.validate' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
           test -f app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
+          test -f app/src/main/java/com/omnicore/emulator/storage/Ps1PlaylistMedia.kt
           grep -q 'parseM3u' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
           grep -q 'groupByDiscNumber' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
-          grep -q 'not wired as a launchable format yet' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
-          ! grep -q '"m3u"' app/src/main/java/com/omnicore/emulator/core/ps1/Ps1Core.kt
+          grep -q 'libretro disk-control interface' app/src/main/java/com/omnicore/emulator/storage/Ps1DiscManifest.kt
+          grep -q 'Ps1PlaylistMedia.plan' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'prepareM3uSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'validateM3uSession' app/src/main/java/com/omnicore/emulator/emulation/EmulationActivity.kt
+          grep -q 'importPs1Playlists' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
+          grep -q 'it.extension == "m3u"' app/src/main/java/com/omnicore/emulator/ui/OmniCoreV3App.kt
 
       - name: Guard native libretro disk-control bridge
         shell: bash
@@ -110,17 +117,14 @@ jobs:
           grep -q 'RETRO_ENVIRONMENT_SET_DISK_CONTROL_EXT_INTERFACE' "$RUNNER_TEMP/libretro_host_disk.cpp"
           grep -q 'diskControlAvailable_' "$RUNNER_TEMP/libretro_host_disk.cpp"
 
-      - name: Guard Quick Menu disk-control UI when applied
+      - name: Guard Quick Menu disk-control UI
         shell: bash
         run: |
           set -euo pipefail
-          if grep -q 'showDiskDialog' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt; then
-            grep -q '"DISCO"' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
-            grep -q 'NativeBridge.diskState()' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
-            grep -q 'NativeBridge.setDiskIndex' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
-          else
-            test -f tools/patch_ps1_ui_disk.py
-          fi
+          grep -q 'showDiskDialog' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -q '"DISCO"' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -q 'NativeBridge.diskState()' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -q 'NativeBridge.setDiskIndex' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
 
       - name: Guard physical Input 2.0 path
         shell: bash
