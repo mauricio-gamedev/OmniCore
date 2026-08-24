@@ -43,9 +43,14 @@ class Ps1Core : EmulatorCore {
                 "Este CCD precisa do IMG correspondente. Importe a pasta completa do jogo para manter CCD/IMG/SUB juntos."
             }
         }
+        if (extension == "m3u") {
+            require(!game.folderUri.isNullOrBlank() || game.companionUris.size > 2) {
+                "Esta playlist M3U precisa dos discos e arquivos auxiliares. Importe a pasta completa ou selecione a playlist com todos os discos."
+            }
+        }
 
         // Compatibility 2.0 preflight is header-only and does not rewrite media.
-        // Descriptor sets keep their existing CUE/CCD runtime validation path.
+        // Descriptor sets keep their existing CUE/CCD/M3U runtime validation paths.
         val preflight = Ps1MediaPreflight.validate(context, game, extension)
         require(preflight.ok) {
             preflight.error ?: "A imagem de PS1 falhou na validação antes do boot."
@@ -66,10 +71,10 @@ class Ps1Core : EmulatorCore {
 
     companion object {
         // Preserve the legacy standalone contract exactly. Descriptor-based media
-        // is separate so the Ps1MediaLayout importer can keep CUE/BIN and
-        // CCD/IMG/SUB grouped instead of exposing their tracks as duplicate games.
+        // is separate so import planning can keep CUE/BIN, CCD/IMG/SUB and M3U
+        // multi-disc sets grouped instead of exposing their tracks as duplicate games.
         val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe")
-        val DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd")
+        val DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd", "m3u")
         val SUPPORTED_EXTENSIONS = SINGLE_FILE_EXTENSIONS + DESCRIPTOR_EXTENSIONS
     }
 }
