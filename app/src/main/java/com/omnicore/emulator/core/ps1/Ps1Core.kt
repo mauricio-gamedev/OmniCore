@@ -12,6 +12,7 @@ import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.settings.InputSettings
 import com.omnicore.emulator.settings.Ps1Settings
+import com.omnicore.emulator.storage.Ps1MediaPreflight
 
 class Ps1Core : EmulatorCore {
     override val info = CoreInfo(
@@ -41,6 +42,13 @@ class Ps1Core : EmulatorCore {
             require(!game.folderUri.isNullOrBlank() || game.companionUris.isNotEmpty()) {
                 "Este CCD precisa do IMG correspondente. Importe a pasta completa do jogo para manter CCD/IMG/SUB juntos."
             }
+        }
+
+        // Compatibility 2.0 preflight is header-only and does not rewrite media.
+        // Descriptor sets keep their existing CUE/CCD runtime validation path.
+        val preflight = Ps1MediaPreflight.validate(context, game, extension)
+        require(preflight.ok) {
+            preflight.error ?: "A imagem de PS1 falhou na validação antes do boot."
         }
 
         // Resolve SMART before the Activity exists so touch and physical controllers
