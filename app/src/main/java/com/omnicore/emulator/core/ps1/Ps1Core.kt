@@ -43,10 +43,11 @@ class Ps1Core : EmulatorCore {
     }
 
     companion object {
-        // CCD is accepted as a library primary so the existing folder importer can
-        // surface the set. The runtime never treats it as a true standalone image:
-        // EmulationActivity stages the matching IMG and optional SUB/SBI together.
-        val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe", "ccd")
-        val SUPPORTED_EXTENSIONS = SINGLE_FILE_EXTENSIONS + "cue"
+        // Keep the old single-file set unchanged so the current importer cannot
+        // expose IMG twice when a CCD/IMG/SUB folder is selected. CCD becomes an
+        // importable primary only after Ps1MediaLayout is wired into the UI.
+        val SINGLE_FILE_EXTENSIONS = setOf("chd", "pbp", "iso", "bin", "img", "mdf", "cbn", "exe")
+        val DESCRIPTOR_EXTENSIONS = setOf("cue", "ccd")
+        val SUPPORTED_EXTENSIONS = SINGLE_FILE_EXTENSIONS + DESCRIPTOR_EXTENSIONS
     }
 }
