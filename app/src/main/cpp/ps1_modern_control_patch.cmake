@@ -1,4 +1,4 @@
-# Layer Modern Control Engine v2 on top of the already-generated PS1 disk host.
+# Layer Modern Control Engine v2.1 on top of the already-generated PS1 disk host.
 # The validated Alpha 6 libretro_host_v7.cpp and disk-control patch remain untouched.
 # Every replacement is anchored and fails closed if the generated host shape changes.
 if(NOT DEFINED OMNICORE_MODERN_HOST_INPUT OR NOT DEFINED OMNICORE_MODERN_HOST_OUTPUT)
@@ -74,6 +74,7 @@ modern_replace_required("${OLD}" "${NEW}" "joypad mask composition")
 # Frame-synchronous intent resolver. It deliberately does not read game memory and
 # never changes the core clock, frame pacing, audio or video. Horizontal strength is
 # quantized with a sigma-delta accumulator so turn frames are distributed evenly.
+# R5 keeps R4's precise vertical path and increases only moving-curve authority.
 set(OLD [=[
     void runLoop() {
 ]=])
@@ -112,8 +113,9 @@ set(NEW [=[
             targetY /= rawMagnitude;
         }
 
-        // Lightweight one-pole filter, executed exactly once per emulated frame.
-        // It removes touch/controller jitter without adding a timer or another thread.
+        // Preserve the R4 one-pole filter because device testing showed that the
+        // forward/back path became more precise. R5 changes steering authority after
+        // this filter instead of disturbing the validated centre/vertical response.
         constexpr float kFilterAlpha = 0.50f;
         modernFilteredX_ += (targetX - modernFilteredX_) * kFilterAlpha;
         modernFilteredY_ += (targetY - modernFilteredY_) * kFilterAlpha;
@@ -137,7 +139,7 @@ set(NEW [=[
 
         const float ax = std::abs(x);
         const float ay = std::abs(y);
-        constexpr float kTurnAxisDeadzone = 0.15f;
+        constexpr float kTurnAxisDeadzone = 0.13f;
         constexpr float kMoveAxisDeadzone = 0.21f;
         int turnSign = x <= -kTurnAxisDeadzone ? -1 : (x >= kTurnAxisDeadzone ? 1 : 0);
 
@@ -173,9 +175,10 @@ set(NEW [=[
         const unsigned moveId = moveSign < 0 ? 4u : 5u;
         std::uint32_t mask = modernButtonBit(moveId);
 
-        // Wide straight cone: natural sideways thumb drift stays straight.
-        constexpr float kStraightSteerDeadzone = 0.14f;
-        constexpr float kStraightConeRatio = 0.20f;
+        // Keep a small straight cone so normal thumb drift stays straight, but make it
+        // narrower than R4 so an intentional diagonal begins curving sooner.
+        constexpr float kStraightSteerDeadzone = 0.12f;
+        constexpr float kStraightConeRatio = 0.18f;
         if (turnSign == 0 || ax <= kStraightSteerDeadzone || ax < ay * kStraightConeRatio) {
             modernTurnSign_ = 0;
             modernTurnAccumulator_ = 0.0f;
@@ -183,9 +186,9 @@ set(NEW [=[
             return;
         }
 
-        // A direction change gets an immediate correction frame, then sigma-delta
-        // distributes later turn frames according to analog strength. This is stable
-        // at PAL/NTSC rates because it is tied to retro_run, not Android milliseconds.
+        // A direction change gets an immediate correction frame. Later correction
+        // frames are sigma-delta distributed according to analog intent, one decision
+        // per retro_run, so PAL/NTSC and Android timer jitter cannot change the pattern.
         if (turnSign != modernTurnSign_) {
             modernTurnSign_ = turnSign;
             modernTurnAccumulator_ = 1.0f;
@@ -193,12 +196,29 @@ set(NEW [=[
 
         const float normalized = std::clamp(
             (ax - kStraightSteerDeadzone) / (1.0f - kStraightSteerDeadzone), 0.0f, 1.0f);
-        const float curved = 0.30f * normalized + 0.70f * normalized * normalized;
-        constexpr float kMinTurnDuty = 0.10f;
-        constexpr float kMaxTurnDuty = 0.94f;
-        const float duty = std::clamp(
-            kMinTurnDuty + (kMaxTurnDuty - kMinTurnDuty) * curved,
-            kMinTurnDuty, kMaxTurnDuty);
+
+        // R5 response curve: more linear through the middle than R4. This preserves
+        // micro-corrections near centre while making a 30-60 degree stick angle produce
+        // a visibly useful course change instead of an almost-straight path.
+        const float curved = 0.62f * normalized + 0.38f * normalized * normalized;
+        constexpr float kMinTurnDuty = 0.16f;
+        constexpr float kMaxTurnDuty = 0.98f;
+        float duty = kMinTurnDuty + (kMaxTurnDuty - kMinTurnDuty) * curved;
+
+        // Gated diagonal boost. Tiny sideways drift does not get boosted; once both
+        // axes are deliberately engaged, the boost rises smoothly toward a true
+        // diagonal. This increases curve authority without returning to held UP+RIGHT.
+        const float minAxis = std::min(ax, ay);
+        const float maxAxis = std::max(ax, ay);
+        const float diagonalRatio = maxAxis > 0.0001f ? std::clamp(minAxis / maxAxis, 0.0f, 1.0f) : 0.0f;
+        const float diagonalGate = std::clamp((minAxis - 0.20f) / 0.42f, 0.0f, 1.0f);
+        duty += 0.16f * diagonalRatio * diagonalGate;
+
+        // Near the outer rim the player's intent is strong, so allow a little extra
+        // authority before the dedicated turn-in-place sector takes over.
+        const float edgeBoost = std::clamp((ax - 0.72f) / 0.28f, 0.0f, 1.0f);
+        duty += 0.06f * edgeBoost;
+        duty = std::clamp(duty, kMinTurnDuty, kMaxTurnDuty);
 
         modernTurnAccumulator_ += duty;
         const bool turnThisFrame = modernTurnAccumulator_ >= 1.0f;
@@ -260,4 +280,4 @@ void LibretroSession::requestSaveState(int slot) { impl_->requestSaveState(slot)
 modern_replace_required("${OLD}" "${NEW}" "LibretroSession modern wrapper")
 
 file(WRITE "${OMNICORE_MODERN_HOST_OUTPUT}" "${SOURCE}")
-message(STATUS "OmniCore PS1 Modern Control Engine v2 host generated: ${OMNICORE_MODERN_HOST_OUTPUT}")
+message(STATUS "OmniCore PS1 Modern Control Engine v2.1 host generated: ${OMNICORE_MODERN_HOST_OUTPUT}")
