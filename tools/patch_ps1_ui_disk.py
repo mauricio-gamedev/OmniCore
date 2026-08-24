@@ -4,6 +4,10 @@ from pathlib import Path
 path = Path("app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt")
 text = path.read_text(encoding="utf-8")
 
+if "private fun showDiskDialog()" in text and '"DISCO"' in text and "NativeBridge.setDiskIndex" in text:
+    print("PS1 Quick Menu disk-control UI already applied")
+    raise SystemExit(0)
+
 
 def replace_once(old: str, new: str, label: str) -> None:
     global text
