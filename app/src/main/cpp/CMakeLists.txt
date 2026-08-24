@@ -1,12 +1,16 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(omnicore_runtime LANGUAGES CXX)
 
+set(OMNICORE_DISK_HOST_INPUT "${CMAKE_CURRENT_SOURCE_DIR}/libretro_host_v7.cpp")
+set(OMNICORE_DISK_HOST_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/libretro_host_disk.cpp")
+include("${CMAKE_CURRENT_SOURCE_DIR}/ps1_disk_control_patch.cmake")
+
 add_library(
     omnicore_runtime
     SHARED
     native_bridge.cpp
     gl_presenter.cpp
-    libretro_host_v7.cpp
+    "${OMNICORE_DISK_HOST_OUTPUT}"
 )
 
 target_compile_features(omnicore_runtime PRIVATE cxx_std_20)
