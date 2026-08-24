@@ -35,8 +35,8 @@ object Ps1MediaPreflight {
                 )
             }
 
-        if (probe.size == 0L) {
-            return Result(ok = false, error = "${game.fileName} está vazio ou o provedor retornou tamanho zero.")
+        if (probe.size == 0L || probe.bytes.isEmpty()) {
+            return Result(ok = false, error = "${game.fileName} está vazio ou não forneceu bytes legíveis.")
         }
 
         return when (ext) {
@@ -71,14 +71,14 @@ object Ps1MediaPreflight {
         if (!validMagic) return Result(ok = false, error = "$name não possui assinatura PBP válida.")
 
         val buffer = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
-        val offsets = IntArray(8) { index -> buffer.getInt(8 + index * 4) }
-        if (offsets.any { it < PBP_HEADER_BYTES }) {
+        val offsets = LongArray(8) { index -> buffer.getInt(8 + index * 4).toLong() and 0xffff_ffffL }
+        if (offsets.any { it < PBP_HEADER_BYTES.toLong() }) {
             return Result(ok = false, error = "$name possui offsets PBP anteriores ao fim do cabeçalho.")
         }
         if (offsets.zipWithNext().any { (a, c) -> c < a }) {
             return Result(ok = false, error = "$name possui tabela de offsets PBP fora de ordem.")
         }
-        val psarOffset = offsets.last().toLong()
+        val psarOffset = offsets.last()
         if (probe.size > 0L && psarOffset >= probe.size) {
             return Result(ok = false, error = "$name aponta DATA.PSAR para fora do arquivo.")
         }
