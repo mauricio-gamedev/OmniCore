@@ -1,0 +1,96 @@
+name: Publish PS1 Input 2.0 Test APK
+
+on:
+  push:
+    branches: [ "agent/ps1-input2-compat" ]
+    paths:
+      - ".github/workflows/ps1-publish-test-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: ps1-publish-test-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/ps1-input2-compat
+          fetch-depth: 0
+
+      - name: Locate latest successful full APK build
+        id: locate
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="$(gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow ps1-full-build.yml \
+            --branch agent/ps1-input2-compat \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')"
+          test -n "$RUN_ID" && test "$RUN_ID" != "null"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download validated APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/release
+          gh run download "${{ steps.locate.outputs.run_id }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name OmniCore-PS1-Input2-Compatibility2 \
+            --dir build/release
+          test -f build/release/OmniCore-PS1-Input2-Compatibility2-debug.apk
+          test -f build/release/OmniCore-PS1-Input2-Compatibility2-debug.sha256
+          (cd build/release && sha256sum -c OmniCore-PS1-Input2-Compatibility2-debug.sha256)
+
+      - name: Publish test release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="ps1-input2-compat-test"
+          TITLE="OmniCore PS1 Input 2.0 + Compatibility 2.0 Test"
+          NOTES="Test build from branch agent/ps1-input2-compat. Includes PS1 Input 2.0, conservative Smart Auto profiles, modern tank-control assist, physical-controller routing, Compatibility 2.0 media validation, CUE/CCD handling, M3U multi-disc support and in-game disk control. Built with the pinned PCSX-ReARMed core and the stable OmniCore DEV signing certificate."
+          TARGET="$(git rev-parse HEAD)"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --notes "$NOTES" \
+              --prerelease \
+              --target "$TARGET"
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET" \
+              --title "$TITLE" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+
+          gh release upload "$TAG" \
+            build/release/OmniCore-PS1-Input2-Compatibility2-debug.apk \
+            build/release/OmniCore-PS1-Input2-Compatibility2-debug.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+
+      - name: Print release URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view ps1-input2-compat-test \
+            --repo "$GITHUB_REPOSITORY" \
+            --json url \
+            --jq '.url'
