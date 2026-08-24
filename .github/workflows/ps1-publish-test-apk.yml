@@ -31,15 +31,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          RUN_ID="$(gh run list \
-            --repo "$GITHUB_REPOSITORY" \
-            --workflow ps1-full-build.yml \
-            --branch agent/ps1-input2-compat \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId')"
-          test -n "$RUN_ID" && test "$RUN_ID" != "null"
+          RUN_ID="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?branch=agent%2Fps1-input2-compat&status=success&per_page=100" \
+            --jq '.workflow_runs[] | select(.name == "PS1 Input 2.0 Full APK Build") | .id' \
+            | head -n1)"
+          if [ -z "$RUN_ID" ]; then
+            echo "ERROR: no successful PS1 full APK build was found." >&2
+            gh api \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/${GITHUB_REPOSITORY}/actions/runs?branch=agent%2Fps1-input2-compat&per_page=20" \
+              --jq '.workflow_runs[] | [.id,.name,.status,.conclusion,.head_sha] | @tsv' || true
+            exit 1
+          fi
+          echo "Using full-build run $RUN_ID"
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
       - name: Download validated APK artifact
