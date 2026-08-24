@@ -1,0 +1,109 @@
+name: PS1 Input 2.0 Full APK Build
+
+on:
+  push:
+    branches: [ "agent/ps1-input2-compat" ]
+    paths:
+      - ".github/workflows/ps1-full-build.yml"
+      - "app/src/main/**"
+      - "app/build.gradle.kts"
+      - "tools/fetch_ps1_core.sh"
+      - "tools/build_ps1_core_android.sh"
+      - "config/omnicore-dev.keystore.b64"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ps1-full-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/ps1-input2-compat
+          fetch-depth: 0
+
+      - name: Verify Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
+          java -version
+          gradle --version
+          test -d "$ANDROID_SDK_ROOT/platforms/android-36"
+          test -x "$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          test -x "$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          test -x "$ANDROID_NDK_HOME/ndk-build"
+          test -x "$ANDROID_SDK_ROOT/cmake/3.31.5/bin/cmake"
+
+      - name: Prepare stable DEV signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/signing
+          base64 -d config/omnicore-dev.keystore.b64 > build/signing/omnicore-dev.jks
+          chmod 600 build/signing/omnicore-dev.jks
+          echo "OMNICORE_DEV_KEYSTORE=$GITHUB_WORKSPACE/build/signing/omnicore-dev.jks" >> "$GITHUB_ENV"
+          echo "OMNICORE_DEV_STORE_PASSWORD=omnicore-dev-2026" >> "$GITHUB_ENV"
+          echo "OMNICORE_DEV_KEY_ALIAS=omnicore-dev" >> "$GITHUB_ENV"
+          echo "OMNICORE_DEV_KEY_PASSWORD=omnicore-dev-2026" >> "$GITHUB_ENV"
+          keytool -list -keystore build/signing/omnicore-dev.jks -storepass omnicore-dev-2026 -alias omnicore-dev
+
+      - name: Fetch pinned PCSX-ReARMed source
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x tools/fetch_ps1_core.sh tools/build_ps1_core_android.sh
+          ./tools/fetch_ps1_core.sh
+
+      - name: Build PS1 core for Android ARM
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./tools/build_ps1_core_android.sh
+
+      - name: Build full OmniCore debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Verify signed APK and 16 KB alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          EXPECTED="9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547"
+          test -f "$APK"
+          "$APKSIGNER" verify --print-certs "$APK"
+          ACTUAL="$("$APKSIGNER" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED" || { echo "ERROR: unexpected DEV signing certificate: $ACTUAL" >&2; exit 1; }
+          "$ZIPALIGN" -v -c -P 16 4 "$APK"
+
+      - name: Package APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/ps1-input2
+          cp app/build/outputs/apk/debug/app-debug.apk build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.apk
+          sha256sum build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.apk > build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.sha256
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniCore-PS1-Input2-Compatibility2
+          path: |
+            build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.apk
+            build/ps1-input2/OmniCore-PS1-Input2-Compatibility2-debug.sha256
+          if-no-files-found: error
+          retention-days: 14
