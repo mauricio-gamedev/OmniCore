@@ -1,0 +1,46 @@
+name: PS1 Input 2.0 CI
+
+on:
+  push:
+    branches: [ "agent/ps1-input2-compat" ]
+    paths:
+      - "app/src/main/java/com/omnicore/emulator/emulation/**"
+      - "app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt"
+      - ".github/workflows/ps1-input2-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ps1-input2-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kotlin-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/ps1-input2-compat
+
+      - name: Guard legacy input contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SMART("smart"' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'NATIVE("native"' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'DPAD("dpad"' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'TANK_ASSIST("tank_assist"' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'TankMovementAssist' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -q 'saveGameAnalogMode' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'clearGameAnalogMode' app/src/main/java/com/omnicore/emulator/settings/InputSettings.kt
+          grep -q 'buttonPointerTargets' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+          grep -q 'dpadProjectionCache' app/src/main/java/com/omnicore/emulator/emulation/GamepadOverlayView.kt
+
+      - name: Compile Kotlin sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          gradle :app:compileDebugKotlin --no-daemon --stacktrace
