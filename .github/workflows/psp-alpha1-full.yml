@@ -44,8 +44,8 @@ jobs:
           set -euo pipefail
           BASELINE=744305dffa1f70c9ec847490e14a7e16143bbc1f
           git cat-file -e "$BASELINE^{commit}"
-          grep -Fqx 'versionCode = 53' app/build.gradle.kts
-          grep -Fqx 'versionName = "0.12.0-psp-alpha1"' app/build.gradle.kts
+          grep -Eq '^[[:space:]]*versionCode = 53$' app/build.gradle.kts
+          grep -Eq '^[[:space:]]*versionName = "0.12.0-psp-alpha1"$' app/build.gradle.kts
           grep -Fqx 'PPSSPP_TAG=v1.20.4' config/ppsspp-pin.txt
           grep -Fqx 'PPSSPP_COMMIT=fa50bb1976065c4f8b1b47af227d367fe9771555' config/ppsspp-pin.txt
 

@@ -403,6 +403,8 @@ void LibretroHost::registerOptions(const retro_variable* variables) {
     options_["ppsspp_cpu_core"] = "JIT";
     options_["ppsspp_internal_resolution"] = "480x272";
     options_["ppsspp_software_rendering"] = "disabled";
+    options_["ppsspp_frameskip"] = "disabled";
+    options_["ppsspp_auto_frameskip"] = "disabled";
 }
 
 const char* LibretroHost::optionValue(const char* key) {
