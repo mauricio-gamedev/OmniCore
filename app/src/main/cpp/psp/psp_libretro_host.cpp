@@ -22,6 +22,7 @@ constexpr unsigned kGetVariableCommand = RETRO_ENVIRONMENT_GET_VARIABLE;
 constexpr unsigned kSetVariablesCommand = RETRO_ENVIRONMENT_SET_VARIABLES;
 constexpr unsigned kGetVariableUpdateCommand = RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE;
 constexpr unsigned kSetPixelFormatCommand = RETRO_ENVIRONMENT_SET_PIXEL_FORMAT;
+constexpr unsigned kGetPreferredHwRenderCommand = 56;
 constexpr unsigned kGetSystemDirectoryCommand = RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY;
 constexpr unsigned kGetSaveDirectoryCommand = RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY;
 constexpr unsigned kGetContentDirectoryCommand = RETRO_ENVIRONMENT_GET_CONTENT_DIRECTORY;
@@ -437,6 +438,10 @@ bool LibretroHost::environment(unsigned cmd, void* data) {
             return data != nullptr;
         case kSetPixelFormatCommand:
             return data && *static_cast<retro_pixel_format*>(data) == RETRO_PIXEL_FORMAT_XRGB8888;
+        case kGetPreferredHwRenderCommand:
+            if (!data) return false;
+            *static_cast<abi::retro_hw_context_type*>(data) = abi::RETRO_HW_CONTEXT_OPENGLES2;
+            return true;
         case abi::RETRO_ENVIRONMENT_SET_HW_RENDER: {
             if (!data || display_ == EGL_NO_DISPLAY || eglContext_ == EGL_NO_CONTEXT) return false;
             auto* callback = static_cast<abi::retro_hw_render_callback*>(data);
