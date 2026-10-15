@@ -141,3 +141,44 @@ target_link_libraries(
     ${log-lib}
     ${dl-lib}
 )
+
+
+# PSP runtime. Kept separate from the protected PS1, N64 and PS2 targets.
+# PPSSPP is packaged as an independently built libretro shared object and
+# loaded only by this PSP-owned host.
+add_library(
+    omnicore_psp_runtime
+    SHARED
+    psp/psp_native_bridge.cpp
+    psp/psp_libretro_host.cpp
+)
+
+target_compile_features(omnicore_psp_runtime PRIVATE cxx_std_20)
+target_compile_options(
+    omnicore_psp_runtime
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -O2
+    -ffunction-sections
+    -fdata-sections
+    -fvisibility=hidden
+)
+target_link_options(
+    omnicore_psp_runtime
+    PRIVATE
+    -Wl,--gc-sections
+    -Wl,-z,max-page-size=16384
+)
+set_property(TARGET omnicore_psp_runtime PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+target_include_directories(omnicore_psp_runtime PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(
+    omnicore_psp_runtime
+    ${android-lib}
+    ${log-lib}
+    ${aaudio-lib}
+    ${dl-lib}
+    ${egl-lib}
+    ${glesv2-lib}
+)
