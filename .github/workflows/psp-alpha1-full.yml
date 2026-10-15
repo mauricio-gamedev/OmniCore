@@ -1,0 +1,265 @@
+name: PSP PPSSPP Alpha 1
+
+on:
+  push:
+    branches: ["agent/psp-integration-alpha1"]
+    paths:
+      - ".github/workflows/psp-alpha1-full.yml"
+      - "app/build.gradle.kts"
+      - "app/src/main/cpp/CMakeLists.txt"
+      - "app/src/main/cpp/psp/**"
+      - "app/src/main/java/com/omnicore/emulator/core/psp/**"
+      - "app/src/main/java/com/omnicore/emulator/emulation/PSP*"
+      - "app/src/main/java/com/omnicore/emulator/storage/PSPStorage.kt"
+      - "app/src/main/AndroidManifest.xml"
+      - "app/src/main/java/com/omnicore/emulator/core/CoreRegistry.kt"
+      - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"
+      - "app/src/main/assets/psp/**"
+      - "config/ppsspp-pin.txt"
+      - "docs/PSP_ALPHA1.md"
+      - "THIRD_PARTY_NOTICES.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: omnicore-psp-alpha1
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Checkout PSP branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/psp-integration-alpha1
+          fetch-depth: 0
+
+      - name: Verify baseline, scope and pinned upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASELINE=744305dffa1f70c9ec847490e14a7e16143bbc1f
+          git cat-file -e "$BASELINE^{commit}"
+          grep -Fqx 'versionCode = 53' app/build.gradle.kts
+          grep -Fqx 'versionName = "0.12.0-psp-alpha1"' app/build.gradle.kts
+          grep -Fqx 'PPSSPP_TAG=v1.20.4' config/ppsspp-pin.txt
+          grep -Fqx 'PPSSPP_COMMIT=fa50bb1976065c4f8b1b47af227d367fe9771555' config/ppsspp-pin.txt
+
+          # Protected, already-working emulator implementations must remain unchanged.
+          git diff --exit-code "$BASELINE" -- \
+            app/src/main/cpp/libretro_host_v7.cpp \
+            app/src/main/cpp/n64 \
+            app/src/main/cpp/ps2 \
+            app/src/main/java/com/omnicore/emulator/core/ps1 \
+            app/src/main/java/com/omnicore/emulator/core/n64 \
+            app/src/main/java/com/omnicore/emulator/core/ps2 \
+            app/src/main/java/com/omnicore/emulator/emulation/N64GamepadOverlayView.kt \
+            app/src/main/java/com/omnicore/emulator/emulation/PS2GamepadOverlayView.kt \
+            app/src/main/java/com/omnicore/emulator/settings/N64Settings.kt \
+            app/src/main/java/com/omnicore/emulator/settings/PS2Settings.kt
+          test -f app/src/main/java/com/omnicore/emulator/emulation/PSPEmulationActivity.kt
+          test -f app/src/main/java/com/omnicore/emulator/core/psp/PSPCore.kt
+          test -f third_party/licenses/PPSSPP-LICENSE.TXT
+          echo "PSP_SCOPE_GUARD_OK"
+
+      - name: Prepare Android toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          if ! test -d "$NDK"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
+          fi
+          if ! test -d "$ANDROID_SDK_ROOT/platforms/android-36"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36'
+          fi
+          if ! test -d "$ANDROID_SDK_ROOT/build-tools/36.0.0"; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0'
+          fi
+          echo "OMNI_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
+
+      - name: Prepare stable development signer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/signing
+          base64 -d config/omnicore-dev.keystore.b64 > build/signing/omnicore-dev.jks
+          chmod 600 build/signing/omnicore-dev.jks
+          echo "OMNICORE_DEV_KEYSTORE=$GITHUB_WORKSPACE/build/signing/omnicore-dev.jks" >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_STORE_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_ALIAS=omnicore-dev' >> "$GITHUB_ENV"
+          echo 'OMNICORE_DEV_KEY_PASSWORD=omnicore-dev-2026' >> "$GITHUB_ENV"
+
+      - name: Reuse the validated Alpha 6 native payload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BASE_DIR="$GITHUB_WORKSPACE/build/alpha6-base"
+          UNPACK="$BASE_DIR/unpack"
+          mkdir -p "$BASE_DIR" "$UNPACK"
+          gh release download v0.11.5-ps2-alpha6 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'OmniCore-v0.11.5-ps2-alpha6.apk' \
+            --dir "$BASE_DIR"
+          BASE_APK="$BASE_DIR/OmniCore-v0.11.5-ps2-alpha6.apk"
+          test -s "$BASE_APK"
+
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
+          "$AAPT" dump badging "$BASE_APK" | tee "$BASE_DIR/base-badging.txt"
+          grep -q "package: name='com.omnicore.emulator' versionCode='45' versionName='0.11.5'" "$BASE_DIR/base-badging.txt"
+          "$APKSIGNER" verify --print-certs "$BASE_APK" > "$BASE_DIR/base-cert.txt"
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$BASE_DIR/base-cert.txt" | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED"
+
+          unzip -q "$BASE_APK" \
+            'lib/arm64-v8a/libpcsx_rearmed_libretro.so' \
+            'lib/armeabi-v7a/libpcsx_rearmed_libretro.so' \
+            'lib/arm64-v8a/libmupen64plus_next_libretro.so' \
+            'lib/armeabi-v7a/libmupen64plus_next_libretro.so' \
+            'lib/arm64-v8a/libemucore_4k.so' \
+            'lib/arm64-v8a/libemucore_16k.so' \
+            'assets/pcsx2/*' \
+            'assets/licenses/GPL-3.0-PCSX2-ARMSX2.txt' \
+            -d "$UNPACK"
+
+          mkdir -p app/src/main/jniLibs/arm64-v8a app/src/main/jniLibs/armeabi-v7a
+          cp "$UNPACK/lib/arm64-v8a/libpcsx_rearmed_libretro.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/armeabi-v7a/libpcsx_rearmed_libretro.so" app/src/main/jniLibs/armeabi-v7a/
+          cp "$UNPACK/lib/arm64-v8a/libmupen64plus_next_libretro.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/armeabi-v7a/libmupen64plus_next_libretro.so" app/src/main/jniLibs/armeabi-v7a/
+          cp "$UNPACK/lib/arm64-v8a/libemucore_4k.so" app/src/main/jniLibs/arm64-v8a/
+          cp "$UNPACK/lib/arm64-v8a/libemucore_16k.so" app/src/main/jniLibs/arm64-v8a/
+          mkdir -p app/src/main/assets/licenses
+          rm -rf app/src/main/assets/pcsx2
+          cp -a "$UNPACK/assets/pcsx2" app/src/main/assets/
+          cp "$UNPACK/assets/licenses/GPL-3.0-PCSX2-ARMSX2.txt" app/src/main/assets/licenses/
+          test -n "$(find app/src/main/assets/pcsx2/resources -type f -print -quit)"
+          echo "ALPHA6_NATIVE_PAYLOAD_REUSED_OK"
+
+      - name: Fetch pinned PPSSPP source and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --recurse-submodules --branch v1.20.4 \
+            https://github.com/hrydgard/ppsspp.git upstream/ppsspp
+          git -C upstream/ppsspp submodule update --init --recursive
+          test "$(git -C upstream/ppsspp rev-parse HEAD)" = "fa50bb1976065c4f8b1b47af227d367fe9771555"
+          mkdir -p app/src/main/assets/psp/PPSSPP app/src/main/assets/licenses
+          cp -a upstream/ppsspp/assets/. app/src/main/assets/psp/PPSSPP/
+          cp upstream/ppsspp/LICENSE.TXT app/src/main/assets/licenses/PPSSPP-LICENSE.TXT
+          test -s app/src/main/assets/psp/PPSSPP/compat.ini
+          test -s app/src/main/assets/licenses/PPSSPP-LICENSE.TXT
+          mkdir -p build/psp
+          printf 'PPSSPP_TAG=v1.20.4\nPPSSPP_COMMIT=%s\n' \
+            "$(git -C upstream/ppsspp rev-parse HEAD)" > build/psp/ppsspp-build-info.txt
+
+      - name: Build PPSSPP libretro core for both Android ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export NDK="$OMNI_NDK_HOME"
+          for ABI in arm64-v8a armeabi-v7a; do
+            rm -rf upstream/ppsspp/build
+            (
+              cd upstream/ppsspp
+              export APP_ABI="$ABI"
+              export CMAKE_ARGS="-DANDROID_PLATFORM=android-26 -DCMAKE_BUILD_TYPE=Release -DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
+              ./b.sh --libretro_android --release --no-sdl2 --gles
+            )
+            test -s upstream/ppsspp/build/ppsspp_libretro_android.so
+            cp upstream/ppsspp/build/ppsspp_libretro_android.so \
+              "app/src/main/jniLibs/$ABI/libppsspp_libretro_android.so"
+          done
+          test -s app/src/main/jniLibs/arm64-v8a/libppsspp_libretro_android.so
+          test -s app/src/main/jniLibs/armeabi-v7a/libppsspp_libretro_android.so
+          echo "PPSSPP_BOTH_ABIS_BUILT_OK"
+
+      - name: Archive the exact upstream source snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar --exclude-vcs --exclude='build' --exclude='build-*' \
+            -czf build/psp/ppsspp-v1.20.4-source.tar.gz -C upstream/ppsspp .
+          sha256sum build/psp/ppsspp-v1.20.4-source.tar.gz \
+            > build/psp/ppsspp-v1.20.4-source.tar.gz.sha256
+          test -s build/psp/ppsspp-v1.20.4-source.tar.gz
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export ANDROID_NDK_HOME="$OMNI_NDK_HOME"
+          gradle :app:assembleRelease --stacktrace --no-daemon
+          test -s app/build/outputs/apk/release/app-release.apk
+
+      - name: Verify APK identity, signer, retained cores and 16 KB alignment
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          AAPT="$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/36.0.0/apksigner"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/36.0.0/zipalign"
+          READELF="$OMNI_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+          EXPECTED=9490d1ad4666312d6dd9e5b2a20699583919ae80a5536882bcd3f9accc793547
+
+          unzip -tqq "$APK"
+          "$AAPT" dump badging "$APK" | tee build/psp/apk-badging.txt
+          grep -q "package: name='com.omnicore.emulator' versionCode='53' versionName='0.12.0-psp-alpha1'" build/psp/apk-badging.txt
+          "$APKSIGNER" verify --verbose --print-certs "$APK" | tee build/psp/apk-cert.txt
+          ACTUAL="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' build/psp/apk-cert.txt | head -n1 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test "$ACTUAL" = "$EXPECTED"
+
+          CHECK=build/psp/apk-unpack
+          rm -rf "$CHECK" && mkdir -p "$CHECK"
+          unzip -q "$APK" -d "$CHECK"
+          for ABI in arm64-v8a armeabi-v7a; do
+            test -f "$CHECK/lib/$ABI/libomnicore_psp_runtime.so"
+            test -f "$CHECK/lib/$ABI/libppsspp_libretro_android.so"
+            test -f "$CHECK/lib/$ABI/libpcsx_rearmed_libretro.so"
+            test -f "$CHECK/lib/$ABI/libmupen64plus_next_libretro.so"
+          done
+          test -f "$CHECK/lib/arm64-v8a/libemucore_4k.so"
+          test -f "$CHECK/lib/arm64-v8a/libemucore_16k.so"
+          test -s "$CHECK/assets/psp/PPSSPP/compat.ini"
+          test -s "$CHECK/assets/licenses/PPSSPP-LICENSE.TXT"
+          test -n "$(find "$CHECK/assets/pcsx2/resources" -type f -print -quit)"
+
+          while IFS= read -r -d '' SO; do
+            FOUND=0
+            while IFS= read -r LOAD; do
+              FOUND=1
+              ALIGN="$(awk '{print $NF}' <<< "$LOAD")"
+              [[ "$ALIGN" =~ ^0x[0-9A-Fa-f]+$ ]] || exit 1
+              (( ALIGN >= 0x4000 )) || { echo "ELF below 16 KB alignment: $SO :: $LOAD" >&2; exit 1; }
+            done < <("$READELF" -lW "$SO" | grep -E '^[[:space:]]*LOAD[[:space:]]')
+            (( FOUND == 1 )) || { echo "No LOAD segments: $SO" >&2; exit 1; }
+          done < <(find "$CHECK/lib" -type f -name '*.so' -print0)
+          "$ZIPALIGN" -v -c -P 16 4 "$APK"
+          echo "PSP_ALPHA1_APK_VALIDATED_OK"
+
+      - name: Publish test artifact (no public release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniCore-v0.12.0-psp-alpha1
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            build/psp/ppsspp-build-info.txt
+            build/psp/ppsspp-v1.20.4-source.tar.gz
+            build/psp/ppsspp-v1.20.4-source.tar.gz.sha256
+            build/psp/apk-badging.txt
+            build/psp/apk-cert.txt
+          if-no-files-found: error
+          retention-days: 14
