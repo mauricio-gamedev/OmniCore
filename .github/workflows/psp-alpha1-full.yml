@@ -63,7 +63,7 @@ jobs:
             app/src/main/java/com/omnicore/emulator/emulation/N64GamepadOverlayView.kt \
             app/src/main/java/com/omnicore/emulator/emulation/PS2GamepadOverlayView.kt \
             app/src/main/java/com/omnicore/emulator/settings/N64Settings.kt \
-            app/src/main/java/com/omnicore/emulator/settings/PS2Settings.kt
+            app/src/main/java/com/omnicore/emulator/settings/PS2Settings.kt \
             app/src/main/java/com/omnicore/emulator/storage/SafGameSource.kt
           test -f app/src/main/java/com/omnicore/emulator/emulation/PSPEmulationActivity.kt
           test -f app/src/main/java/com/omnicore/emulator/core/psp/PSPCore.kt
