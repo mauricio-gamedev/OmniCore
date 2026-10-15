@@ -71,7 +71,7 @@ private:
     void startAudio();
     void stopAudio();
     void mixAudio(std::int16_t* destination, int32_t frames);
-    void pushAudio(const std::int16_t* samples, std::size_t frames);
+    std::size_t pushAudio(const std::int16_t* samples, std::size_t frames);
     void run();
     void markStartup(bool success, const std::string& message);
     void setMessage(const std::string& message);

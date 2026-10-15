@@ -361,18 +361,21 @@ void LibretroHost::mixAudio(std::int16_t* destination, int32_t frames) {
     audioRead_.store(read, std::memory_order_release);
 }
 
-void LibretroHost::pushAudio(const std::int16_t* samples, std::size_t frames) {
-    if (!samples || frames == 0) return;
+std::size_t LibretroHost::pushAudio(const std::int16_t* samples, std::size_t frames) {
+    if (!samples || frames == 0) return 0;
     auto write = audioWrite_.load(std::memory_order_relaxed);
     const auto read = audioRead_.load(std::memory_order_acquire);
+    std::size_t accepted = 0;
     for (std::size_t frame = 0; frame < frames; ++frame) {
         if (static_cast<std::uint32_t>(write - read) >= kAudioCapacityFrames) break;
         const std::size_t index = static_cast<std::size_t>(write % kAudioCapacityFrames) * 2;
         audioRing_[index] = samples[frame * 2];
         audioRing_[index + 1] = samples[frame * 2 + 1];
         ++write;
+        ++accepted;
     }
     audioWrite_.store(write, std::memory_order_release);
+    return accepted;
 }
 
 void LibretroHost::markStartup(bool success, const std::string& message) {
@@ -681,8 +684,7 @@ void LibretroHost::audioSampleCallback(std::int16_t left, std::int16_t right) {
 
 std::size_t LibretroHost::audioBatchCallback(const std::int16_t* data, std::size_t frames) {
     if (!active_) return 0;
-    active_->pushAudio(data, frames);
-    return frames;
+    return active_->pushAudio(data, frames);
 }
 
 void LibretroHost::inputPollCallback() {}
