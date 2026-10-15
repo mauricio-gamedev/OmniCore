@@ -280,7 +280,7 @@ fun OmniCoreV4App() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "O scanner identifica os sistemas automaticamente. Uma mesma pasta pode conter PS1, N64 e PS2.",
+                        "O scanner identifica formatos exclusivos e aceita pastas mistas. Para PSP (ISO/CSO/PBP), selecione o filtro PSP antes de importar, porque as extensões se sobrepõem.",
                         color = OmniTextSoft
                     )
                     Button(
@@ -299,7 +299,7 @@ fun OmniCoreV4App() {
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30364B))
                     ) { Text("Selecionar arquivos") }
                     Text(
-                        "N64: Z64/N64/V64/ZIP/GZIP • PS1: CUE/BIN e imagens compatíveis • PS2: ISO identificada por SYSTEM.CNF/BOOT2.",
+                        "N64: Z64/N64/V64/ZIP/GZIP • PS1: CUE/BIN e imagens compatíveis • PS2: ISO com SYSTEM.CNF/BOOT2 • PSP: ISO/CSO/PBP com filtro PSP.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF7F879D)
                     )
@@ -565,6 +565,8 @@ private fun OmniSystems(
                     }
                     ConsoleSystem.PLAYSTATION_1 ->
                         Text("PCSX-ReARMed • CUE/BIN • CHD/PBP • saves/estados • BIOS opcional", color = OmniTextSoft)
+                    ConsoleSystem.PSP ->
+                        Text("PPSSPP v1.20.4 • runtime :psp • OpenGL ES • resolução nativa 1×", color = OmniTextSoft)
                     else ->
                         Text("O sistema já faz parte da arquitetura/biblioteca, mas o backend ainda não foi integrado.", color = OmniTextSoft)
                 }
