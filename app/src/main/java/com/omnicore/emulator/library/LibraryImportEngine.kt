@@ -189,20 +189,13 @@ object LibraryImportEngine {
                 return@forEach
             }
 
-            // An explicit import target must win for shared extensions such as ISO,
-            // CSO and PBP. Without this, the PS2 ISO probe could consume a file
-            // before the user's PSP choice is applied below.
-            val candidatesForExplicitChoice = RomDetector.candidates(doc.name)
-            if (preferredSystem != null && preferredSystem in candidatesForExplicitChoice) {
-                if (preferredSystem == ConsoleSystem.PLAYSTATION_1 && doc.extension == "bin" && cues.isNotEmpty()) {
-                    consumed += doc.uri.toString()
-                    return@forEach
-                }
-                games += entry(
-                    doc,
-                    preferredSystem,
-                    if (preferredSystem == ConsoleSystem.PLAYSTATION_1) folderUri else null
-                )
+            // An explicit PSP target must win for shared ISO/CSO/PBP suffixes.
+            // Keep PS1/N64/PS2 classification order and legacy media handling intact.
+            if (
+                preferredSystem == ConsoleSystem.PSP &&
+                ConsoleSystem.PSP in RomDetector.candidates(doc.name)
+            ) {
+                games += entry(doc, ConsoleSystem.PSP, folderUri = null)
                 consumed += doc.uri.toString()
                 return@forEach
             }
