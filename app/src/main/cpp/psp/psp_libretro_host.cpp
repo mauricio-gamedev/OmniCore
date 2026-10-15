@@ -8,6 +8,8 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
+#include <dlfcn.h>
 #include <chrono>
 #include <thread>
 #include <utility>
@@ -47,7 +49,6 @@ constexpr unsigned kGetTargetRefreshRateCommand = abi::RETRO_ENVIRONMENT_GET_TAR
 constexpr unsigned kSetCoreOptionsV2Command = 67;
 constexpr unsigned kSetCoreOptionsV2IntlCommand = 68;
 constexpr unsigned kSetCoreOptionsUpdateDisplayCommand = 69;
-constexpr std::uint16_t kAllButtonsMask = 0xFFFFu;
 
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
@@ -445,7 +446,8 @@ bool LibretroHost::environment(unsigned cmd, void* data) {
             hwRender_ = *callback;
             hwRender_.get_current_framebuffer = &LibretroHost::currentFramebufferCallback;
             hwRender_.get_proc_address = &LibretroHost::procAddressCallback;
-            if (hwRender_.context_reset) hwRender_.context_reset();
+            // PPSSPP's reset callback dereferences its global graphics context.
+            // That pointer is assigned only after retro_load_game returns.
             return true;
         }
         case kGetLogInterfaceCommand:
@@ -517,6 +519,7 @@ bool LibretroHost::environment(unsigned cmd, void* data) {
             return true;
         }
         case RETRO_ENVIRONMENT_SHUTDOWN:
+            setMessage("PPSSPP solicitou o encerramento do jogo.");
             stopRequested_.store(true, std::memory_order_release);
             return true;
         case kSetCoreOptionsCommand:
@@ -576,6 +579,11 @@ void LibretroHost::run() {
             gameLoaded = true;
         }
 
+        if (hwRender_.context_reset) {
+            hwRender_.context_reset();
+            hwContextInitialized_ = true;
+        }
+
         if (api_.setControllerPortDevice) {
             api_.setControllerPortDevice(0, RETRO_DEVICE_JOYPAD);
         }
@@ -626,14 +634,16 @@ void LibretroHost::run() {
 
 cleanup:
     running_.store(false, std::memory_order_release);
+    // Destroy the graphics context before retro_unload_game deletes it.
+    if (hwContextInitialized_ && hwRender_.context_destroy && display_ != EGL_NO_DISPLAY) {
+        hwRender_.context_destroy();
+        hwContextInitialized_ = false;
+    }
     if (gameLoaded && api_.unloadGame) {
         api_.unloadGame();
     }
     if (coreInitialized && api_.deinit) {
         api_.deinit();
-    }
-    if (hwRender_.context_destroy && display_ != EGL_NO_DISPLAY) {
-        hwRender_.context_destroy();
     }
     stopAudio();
     destroyEgl();

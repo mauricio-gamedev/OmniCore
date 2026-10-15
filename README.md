@@ -112,7 +112,7 @@ The N64 maintenance channel preserves:
 | PlayStation 1 | PCSX-ReARMed / libretro | **Functional / device validated** |
 | Nintendo 64 | Mupen64Plus-Next / libretro | **Alpha 24 / maintenance** |
 | PlayStation 2 | Play! behind OmniCore `PS2Backend` | **0.11.4 Alpha 5 / active device testing** |
-| PSP | PPSSPP | Planned |
+| PSP | PPSSPP v1.20.4 / libretro | **Alpha 1 / device validation pending** |
 | Wii / GameCube | Dolphin | Planned |
 | Nintendo Switch | Experimental backend evaluation | Long-term |
 

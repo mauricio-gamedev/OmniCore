@@ -248,6 +248,7 @@ object LibraryImportEngine {
     private val ACTIVE_SYSTEMS = setOf(
         ConsoleSystem.PLAYSTATION_1,
         ConsoleSystem.NINTENDO_64,
-        ConsoleSystem.PLAYSTATION_2
+        ConsoleSystem.PLAYSTATION_2,
+        ConsoleSystem.PSP
     )
 }

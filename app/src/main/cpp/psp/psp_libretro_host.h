@@ -87,8 +87,6 @@ private:
     static std::int16_t inputStateCallback(unsigned port, unsigned device, unsigned index, unsigned id);
     static std::uintptr_t currentFramebufferCallback();
     static abi::retro_proc_address_t procAddressCallback(const char* symbol);
-    static void contextResetCallback();
-    static void contextDestroyCallback();
     static void logCallback(enum retro_log_level level, const char* format, ...);
     static aaudio_data_callback_result_t audioDataCallback(
         AAudioStream* stream, void* userData, void* audioData, int32_t numFrames);
@@ -100,6 +98,7 @@ private:
     EGLSurface eglSurface_ = EGL_NO_SURFACE;
     EGLContext eglContext_ = EGL_NO_CONTEXT;
     abi::retro_hw_render_callback hwRender_{};
+    bool hwContextInitialized_ = false;
 
     std::thread thread_;
     std::atomic<bool> stopRequested_{false};

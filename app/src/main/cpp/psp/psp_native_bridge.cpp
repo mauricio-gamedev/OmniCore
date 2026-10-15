@@ -4,6 +4,7 @@
 #include <jni.h>
 
 #include <string>
+#include <utility>
 
 namespace {
 std::string fromJString(JNIEnv* env, jstring value) {
