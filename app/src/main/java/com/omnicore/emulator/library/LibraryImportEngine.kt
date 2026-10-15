@@ -8,6 +8,7 @@ import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.storage.Ps1MediaLayout
 import com.omnicore.emulator.storage.Ps1PlaylistMedia
+import com.omnicore.emulator.storage.PSPFolderScanner
 import com.omnicore.emulator.storage.SafGameSource
 import java.util.UUID
 
@@ -65,7 +66,7 @@ object LibraryImportEngine {
         // legacy direct-child scanner unchanged for PS1/N64/PS2, whose media
         // grouping and relative-path handling depend on the selected folder layout.
         val docs = (if (preferredSystem == ConsoleSystem.PSP) {
-            SafGameSource.listRecursively(context, treeUri)
+            PSPFolderScanner.listRecursively(context, treeUri)
         } else {
             SafGameSource.listDirectChildren(context, treeUri)
         }).filterNot { it.isDirectory }

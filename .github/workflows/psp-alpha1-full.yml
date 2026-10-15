@@ -11,7 +11,7 @@ on:
       - "app/src/main/java/com/omnicore/emulator/core/psp/**"
       - "app/src/main/java/com/omnicore/emulator/emulation/PSP*"
       - "app/src/main/java/com/omnicore/emulator/storage/PSPStorage.kt"
-      - "app/src/main/java/com/omnicore/emulator/storage/SafGameSource.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/PSPFolderScanner.kt"
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/java/com/omnicore/emulator/core/CoreRegistry.kt"
       - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"
@@ -64,6 +64,7 @@ jobs:
             app/src/main/java/com/omnicore/emulator/emulation/PS2GamepadOverlayView.kt \
             app/src/main/java/com/omnicore/emulator/settings/N64Settings.kt \
             app/src/main/java/com/omnicore/emulator/settings/PS2Settings.kt
+            app/src/main/java/com/omnicore/emulator/storage/SafGameSource.kt
           test -f app/src/main/java/com/omnicore/emulator/emulation/PSPEmulationActivity.kt
           test -f app/src/main/java/com/omnicore/emulator/core/psp/PSPCore.kt
           test -f third_party/licenses/PPSSPP-LICENSE.TXT
