@@ -18,6 +18,7 @@ on:
       - "config/ppsspp-pin.txt"
       - "docs/PSP_ALPHA1.md"
       - "THIRD_PARTY_NOTICES.md"
+      - "third_party/licenses/PPSSPP-LICENSE.TXT"
   workflow_dispatch:
 
 permissions:
@@ -72,16 +73,37 @@ jobs:
           set -euo pipefail
           export JAVA_HOME="$JAVA_HOME_17_X64"
           echo "JAVA_HOME=$JAVA_HOME" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          install_sdk_package() {
+            local package="$1"
+            local target_dir="$2"
+            if [[ -d "$target_dir" ]]; then
+              return 0
+            fi
+            # sdkmanager often exits cleanly while the left-side 'yes' receives
+            # SIGPIPE. Disable pipefail only for this pipeline and inspect the
+            # sdkmanager (rightmost command) status.
+            set +o pipefail
+            local status=0
+            if yes | "$SDKMANAGER" "$package"; then
+              status=0
+            else
+              status=$?
+            fi
+            set -o pipefail
+            if (( status != 0 )); then
+              echo "sdkmanager failed for $package (status $status)" >&2
+              return "$status"
+            fi
+            if [[ ! -d "$target_dir" ]]; then
+              echo "sdkmanager reported success but $target_dir is missing" >&2
+              return 1
+            fi
+          }
           NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
-          if ! test -d "$NDK"; then
-            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
-          fi
-          if ! test -d "$ANDROID_SDK_ROOT/platforms/android-36"; then
-            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36'
-          fi
-          if ! test -d "$ANDROID_SDK_ROOT/build-tools/36.0.0"; then
-            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0'
-          fi
+          install_sdk_package 'ndk;28.2.13676358' "$NDK"
+          install_sdk_package 'platforms;android-36' "$ANDROID_SDK_ROOT/platforms/android-36"
+          install_sdk_package 'build-tools;36.0.0' "$ANDROID_SDK_ROOT/build-tools/36.0.0"
           echo "OMNI_NDK_HOME=$NDK" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$NDK" >> "$GITHUB_ENV"
 

@@ -2,7 +2,6 @@ package com.omnicore.emulator.core.psp
 
 import android.view.Surface
 import java.io.File
-import kotlin.math.hypot
 
 /** JNI boundary loaded only in the PSP-owned Android process. */
 object PSPNativeBridge {
@@ -120,7 +119,7 @@ object PSPNativeBridge {
     }
 
     private fun publishAnalogLocked() {
-        val active = physicalAnalog.values.firstOrNull { hypot(it.first, it.second) > 0.01f }
+        val active = physicalAnalog.values.firstOrNull { it.first * it.first + it.second * it.second > 0.0001f }
         val x = active?.first ?: touchAnalogX
         val y = active?.second ?: touchAnalogY
         nativeSetAnalog(x, y)

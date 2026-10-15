@@ -9,7 +9,6 @@ import android.util.SparseIntArray
 import android.view.MotionEvent
 import android.view.View
 import com.omnicore.emulator.core.psp.PSPNativeBridge
-import kotlin.math.hypot
 import kotlin.math.min
 
 /** Lightweight PSP-specific multitouch layout; ids match upstream PPSSPP libretro mapping. */
@@ -137,12 +136,12 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
                 val x = event.getX(index)
                 val y = event.getY(index)
                 if (analogPointerId == INVALID_POINTER &&
-                    hypot(x - analogCenterX, y - analogCenterY) <= analogRadius * 1.45f
+                    within(x, y, analogCenterX, analogCenterY, analogRadius * 1.45f)
                 ) {
                     analogPointerId = pointerId
                     updateAnalog(x, y)
                 } else {
-                    buttons.firstOrNull { hypot(x - it.x, y - it.y) <= it.radius * 1.55f }
+                    buttons.firstOrNull { within(x, y, it.x, it.y, it.radius * 1.55f) }
                         ?.let { press(pointerId, it.id) }
                 }
                 activeUntilMs = SystemClock.uptimeMillis() + 1400L
@@ -180,14 +179,21 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
         return true
     }
 
+    private fun within(x: Float, y: Float, centerX: Float, centerY: Float, radius: Float): Boolean {
+        val dx = x - centerX
+        val dy = y - centerY
+        return dx * dx + dy * dy <= radius * radius
+    }
+
     private fun updateAnalog(x: Float, y: Float) {
         var dx = ((x - analogCenterX) / analogRadius).coerceIn(-1f, 1f)
         var dy = ((y - analogCenterY) / analogRadius).coerceIn(-1f, 1f)
-        val magnitude = hypot(dx, dy)
-        if (magnitude < ANALOG_DEADZONE) {
+        val magnitudeSquared = dx * dx + dy * dy
+        if (magnitudeSquared < ANALOG_DEADZONE * ANALOG_DEADZONE) {
             dx = 0f
             dy = 0f
-        } else if (magnitude > 1f) {
+        } else if (magnitudeSquared > 1f) {
+            val magnitude = kotlin.math.sqrt(magnitudeSquared.toDouble()).toFloat()
             dx /= magnitude
             dy /= magnitude
         }
