@@ -21,7 +21,7 @@ object PSPFolderScanner {
         treeUri: Uri,
         maxDepth: Int = 8,
         maxEntries: Int = 4096
-    ): List<Document> {
+    ): List<SafGameSource.Document> {
         require(maxDepth >= 0) { "maxDepth must not be negative" }
         require(maxEntries > 0) { "maxEntries must be positive" }
 
@@ -33,7 +33,7 @@ object PSPFolderScanner {
             DocumentsContract.Document.COLUMN_SIZE,
             DocumentsContract.Document.COLUMN_LAST_MODIFIED
         )
-        val result = mutableListOf<Document>()
+        val result = mutableListOf<SafGameSource.Document>()
         val visitedDirectories = mutableSetOf<String>()
         var inspectedEntries = 0
 
@@ -56,7 +56,7 @@ object PSPFolderScanner {
                         val modified = if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) {
                             cursor.getLong(modifiedIndex)
                         } else 0L
-                        val item = Document(
+                        val item = SafGameSource.Document(
                             uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId),
                             name = name,
                             sizeBytes = size,
