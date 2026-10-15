@@ -317,8 +317,9 @@ void LibretroHost::startAudio() {
     AAudioStreamBuilder_setChannelCount(builder, 2);
     AAudioStreamBuilder_setSampleRate(builder, 44100);
     AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-    AAudioStreamBuilder_setUsage(builder, AAUDIO_USAGE_GAME);
-    AAudioStreamBuilder_setContentType(builder, AAUDIO_CONTENT_TYPE_MUSIC);
+    // Keep the platform defaults here: these setters were added in API 28,
+    // while OmniCore still supports API 26. The defaults are media/music and
+    // avoid raising the minimum native API level for the PSP-only runtime.
     AAudioStreamBuilder_setDataCallback(builder, &LibretroHost::audioDataCallback, this);
 
     const aaudio_result_t opened = AAudioStreamBuilder_openStream(builder, &audioStream_);
@@ -710,16 +711,6 @@ std::uintptr_t LibretroHost::currentFramebufferCallback() {
 abi::retro_proc_address_t LibretroHost::procAddressCallback(const char* symbol) {
     if (!symbol) return nullptr;
     return reinterpret_cast<abi::retro_proc_address_t>(eglGetProcAddress(symbol));
-}
-
-void LibretroHost::contextResetCallback() {
-    if (!active_) return;
-    active_->setMessage("Contexto OpenGL ES do PPSSPP inicializado.");
-}
-
-void LibretroHost::contextDestroyCallback() {
-    if (!active_) return;
-    active_->setMessage("Contexto OpenGL ES do PPSSPP encerrado.");
 }
 
 void LibretroHost::logCallback(enum retro_log_level level, const char* format, ...) {
