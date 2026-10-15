@@ -450,9 +450,12 @@ bool LibretroHost::environment(unsigned cmd, void* data) {
                 setMessage("PPSSPP solicitou um contexto gráfico incompatível com este host.");
                 return false;
             }
+            // The libretro frontend contract requires writing these callbacks
+            // into the exact structure supplied by the core. PPSSPP reads them
+            // back immediately after RETRO_ENVIRONMENT_SET_HW_RENDER returns.
+            callback->get_current_framebuffer = &LibretroHost::currentFramebufferCallback;
+            callback->get_proc_address = &LibretroHost::procAddressCallback;
             hwRender_ = *callback;
-            hwRender_.get_current_framebuffer = &LibretroHost::currentFramebufferCallback;
-            hwRender_.get_proc_address = &LibretroHost::procAddressCallback;
             // PPSSPP's reset callback dereferences its global graphics context.
             // That pointer is assigned only after retro_load_game returns.
             return true;
