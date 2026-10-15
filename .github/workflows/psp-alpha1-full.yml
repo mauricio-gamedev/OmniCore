@@ -14,6 +14,7 @@ on:
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/java/com/omnicore/emulator/core/CoreRegistry.kt"
       - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"
+      - "app/src/main/java/com/omnicore/emulator/ui/OmniCoreV4App.kt"
       - "app/src/main/assets/psp/**"
       - "config/ppsspp-pin.txt"
       - "docs/PSP_ALPHA1.md"
@@ -173,7 +174,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --recurse-submodules --branch v1.20.4 \
+          git clone --depth 1 --shallow-submodules --recurse-submodules --branch v1.20.4 \
             https://github.com/hrydgard/ppsspp.git upstream/ppsspp
           git -C upstream/ppsspp submodule update --init --recursive
           test "$(git -C upstream/ppsspp rev-parse HEAD)" = "fa50bb1976065c4f8b1b47af227d367fe9771555"
