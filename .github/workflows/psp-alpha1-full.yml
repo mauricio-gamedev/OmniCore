@@ -11,6 +11,7 @@ on:
       - "app/src/main/java/com/omnicore/emulator/core/psp/**"
       - "app/src/main/java/com/omnicore/emulator/emulation/PSP*"
       - "app/src/main/java/com/omnicore/emulator/storage/PSPStorage.kt"
+      - "app/src/main/java/com/omnicore/emulator/storage/SafGameSource.kt"
       - "app/src/main/AndroidManifest.xml"
       - "app/src/main/java/com/omnicore/emulator/core/CoreRegistry.kt"
       - "app/src/main/java/com/omnicore/emulator/library/LibraryImportEngine.kt"

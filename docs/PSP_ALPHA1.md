@@ -29,7 +29,7 @@ This branch integrates the upstream PPSSPP libretro core as a separate PSP backe
 
 ## Supported import formats
 
-ISO, CSO and PBP. Because extensions overlap with other systems, users should explicitly choose PSP for ambiguous ISO/CSO/PBP files. The library import classifier does not redirect those extensions to a different core based only on suffix.
+ISO, CSO and PBP. The Add Games dialog now has its own `Import as` selector; selecting PSP explicitly routes shared ISO/CSO/PBP extensions to the PSP core. PSP-targeted folder imports scan nested subfolders with depth/entry limits. Other systems retain the existing direct-folder scan and import behavior. In Auto mode, ambiguous disc images are not forced into PSP by suffix alone.
 
 ## Controls
 

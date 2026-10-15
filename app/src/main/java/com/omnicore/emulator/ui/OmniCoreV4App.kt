@@ -93,6 +93,7 @@ fun OmniCoreV4App() {
     var screen by remember { mutableStateOf(OmniHubScreen.LIBRARY) }
     var games by remember { mutableStateOf<List<GameEntry>>(emptyList()) }
     var selectedSystem by remember { mutableStateOf<ConsoleSystem?>(null) }
+    var importSystem by remember { mutableStateOf<ConsoleSystem?>(null) }
     var importDialog by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -145,7 +146,7 @@ fun OmniCoreV4App() {
         }
         scope.launch {
             val report = withContext(Dispatchers.IO) {
-                runCatching { LibraryImportEngine.importFiles(context, uris, selectedSystem) }
+                runCatching { LibraryImportEngine.importFiles(context, uris, importSystem) }
                     .getOrElse {
                         LibraryImportEngine.Report(
                             games = emptyList(),
@@ -167,7 +168,7 @@ fun OmniCoreV4App() {
         }
         scope.launch {
             val report = withContext(Dispatchers.IO) {
-                runCatching { LibraryImportEngine.importFolder(context, treeUri, selectedSystem) }
+                runCatching { LibraryImportEngine.importFolder(context, treeUri, importSystem) }
                     .getOrElse {
                         LibraryImportEngine.Report(
                             games = emptyList(),
@@ -240,7 +241,12 @@ fun OmniCoreV4App() {
                         selectedSystem = selectedSystem,
                         importing = importing,
                         onSystem = { selectedSystem = it },
-                        onImport = { importDialog = true },
+                        onImport = {
+                            // The library filter doubles as a sensible initial import target,
+                            // but the dialog can now override it explicitly.
+                            importSystem = selectedSystem
+                            importDialog = true
+                        },
                         onPlay = { game ->
                             val core = CoreRegistry.forSystem(game.system)
                             when {
@@ -280,8 +286,34 @@ fun OmniCoreV4App() {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "O scanner identifica formatos exclusivos e aceita pastas mistas. Para PSP (ISO/CSO/PBP), selecione o filtro PSP antes de importar, porque as extensões se sobrepõem.",
+                        "Escolha o sistema de destino para formatos compartilhados. “Auto” mantém a detecção automática dos formatos exclusivos.",
                         color = OmniTextSoft
+                    )
+                    Text("Importar como", fontWeight = FontWeight.Bold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        item {
+                            FilterChip(
+                                selected = importSystem == null,
+                                onClick = { importSystem = null },
+                                label = { Text("Auto") }
+                            )
+                        }
+                        items(ConsoleSystem.entries) { system ->
+                            FilterChip(
+                                selected = importSystem == system,
+                                onClick = { importSystem = system },
+                                label = { Text(system.shortName) }
+                            )
+                        }
+                    }
+                    Text(
+                        if (importSystem == ConsoleSystem.PSP) {
+                            "PSP selecionado: ISO/CSO/PBP serão importados como PSP; a seleção de pasta também procura jogos em subpastas."
+                        } else {
+                            "Para jogos de PSP, selecione PSP aqui antes de escolher os arquivos ou a pasta. Isso evita confundir imagens de consoles diferentes."
+                        },
+                        color = OmniTextSoft,
+                        style = MaterialTheme.typography.bodySmall
                     )
                     Button(
                         onClick = {
@@ -299,7 +331,7 @@ fun OmniCoreV4App() {
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF30364B))
                     ) { Text("Selecionar arquivos") }
                     Text(
-                        "N64: Z64/N64/V64/ZIP/GZIP • PS1: CUE/BIN e imagens compatíveis • PS2: ISO com SYSTEM.CNF/BOOT2 • PSP: ISO/CSO/PBP com filtro PSP.",
+                        "N64: Z64/N64/V64/ZIP/GZIP • PS1: CUE/BIN • PS2: ISO validada ou seleção manual • PSP: ISO/CSO/PBP com seleção PSP.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF7F879D)
                     )
