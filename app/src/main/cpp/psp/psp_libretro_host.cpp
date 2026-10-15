@@ -245,7 +245,7 @@ bool LibretroHost::initEgl() {
         EGL_GREEN_SIZE, 8,
         EGL_BLUE_SIZE, 8,
         EGL_ALPHA_SIZE, 8,
-        EGL_DEPTH_SIZE, 0,
+        EGL_DEPTH_SIZE, 24,
         EGL_STENCIL_SIZE, 0,
         EGL_NONE
     };
