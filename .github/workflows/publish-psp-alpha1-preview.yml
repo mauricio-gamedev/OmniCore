@@ -1,6 +1,10 @@
 name: Publish previous PSP Alpha 1 preview
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/publish-psp-alpha1-preview.yml"
   workflow_dispatch:
 
 permissions:
