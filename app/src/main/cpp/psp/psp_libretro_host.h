@@ -6,6 +6,7 @@
 #include <android/native_window.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
 
 #include <array>
 #include <atomic>
@@ -71,6 +72,7 @@ private:
     bool initEgl();
     bool initPresenter();
     void presentFrame();
+    bool configureCoreFramebuffer(bool depth, bool stencil);
     void destroyPresenter();
     void destroyEgl();
     void startAudio();
@@ -104,6 +106,7 @@ private:
     EGLContext eglContext_ = EGL_NO_CONTEXT;
     GLuint coreFramebuffer_ = 0;
     GLuint coreTexture_ = 0;
+    GLuint coreDepthBuffer_ = 0;
     GLuint presenterProgram_ = 0;
     GLint presenterPosition_ = -1;
     GLint presenterTexCoord_ = -1;
