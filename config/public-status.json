@@ -21,7 +21,7 @@
     "psp": {
       "label": "PSP integration preview",
       "version": "0.12.0 Alpha 1",
-      "status": "Experimental PPSSPP v1.20.4 preview; first build has a known ROM import/discovery issue; correction is in PR #1 and CI/device validation is pending",
+      "status": "Experimental PPSSPP v1.20.4 preview; known ROM import/discovery issue; corrected build pending CI/device validation; previous APK is temporarily available as the successful GitHub Actions artifact because release publication was blocked by token permissions.",
       "tag": "v0.12.0-psp-alpha1"
     }
   },
@@ -30,8 +30,8 @@
     "title": "PSP Alpha 1 Preview — PPSSPP v1.20.4",
     "version": "0.12.0 Alpha 1",
     "tag": "v0.12.0-psp-alpha1",
-    "release_url": "https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.12.0-psp-alpha1",
-    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.12.0-psp-alpha1/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk",
-    "summary": "Experimental PPSSPP v1.20.4/libretro integration in the isolated :psp process, with native 1x resolution and frame skipping disabled. The published initial preview has a known PSP ROM discovery/import issue. A correction adds an explicit Import as → PSP selector and bounded recursive PSP folder scanning; CI and physical-device validation are still pending."
+    "release_url": "https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970",
+    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970",
+    "summary": "Experimental PPSSPP v1.20.4/libretro integration in the isolated :psp process, with native 1x resolution and frame skipping disabled. The published initial preview has a known PSP ROM discovery/import issue. A correction adds an explicit Import as → PSP selector and bounded recursive PSP folder scanning; CI and physical-device validation are still pending. The previous successful build is available as a GitHub Actions artifact; the release tag has not been published because GitHub denied release creation to the workflow token."
   }
 }
