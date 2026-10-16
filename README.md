@@ -30,8 +30,7 @@ OmniCore is a **multi-system Android emulation hub**. Each console owns its runt
 
 The PSP integration is deliberately isolated: PS1, N64 and PS2 runtime implementations are not being refactored as part of this work. No games, PSP firmware or proprietary content are bundled.
 
-- [Previous Alpha 1 preview download / release tag](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.12.0-psp-alpha1)
-- [Previous APK — known import issue](https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.12.0-psp-alpha1/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk)
+- [Previous Alpha 1 build artifact in GitHub Actions](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970) — open the run and download the `OmniCore-v0.12.0-psp-alpha1` artifact. The release tag has not been published yet because GitHub blocked the release-creation token.
 - [Current import-fix CI run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38826858199)
 - [PSP integration pull request](https://github.com/mauricio-gamedev/OmniCore/pull/1)
 
@@ -75,10 +74,7 @@ Physical-device validation of this newest Alpha 6 build is **still pending**; ru
 ### Downloads
 
 **PSP Alpha 1 preview — known ROM import/discovery issue**  
-https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.12.0-psp-alpha1
-
-**Previous PSP Alpha 1 APK**  
-https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.12.0-psp-alpha1/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk
+The prerelease tag is pending GitHub release permissions. The previous CI artifact is available from the [original successful PSP Alpha 1 build run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970); download the `OmniCore-v0.12.0-psp-alpha1` artifact there and extract the APK.
 
 **Corrected PSP import build**  
 [Build/validation status in GitHub Actions](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38826858199) — do not treat it as downloadable until CI produces a new artifact and device testing confirms the fix.
