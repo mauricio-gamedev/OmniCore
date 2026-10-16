@@ -32,10 +32,16 @@ object PSPNativeBridge {
         if (!runtimeLoaded) "Runtime PSP indisponível"
         else runCatching { nativeRuntimeInfo() }.getOrDefault("Runtime PSP carregado")
 
-    fun start(surface: Surface, romPath: String, systemDir: String, saveDir: String): Boolean {
+    fun start(
+        surface: Surface,
+        romPath: String,
+        systemDir: String,
+        saveDir: String,
+        internalResolution: Int = 1
+    ): Boolean {
         if (!runtimeLoaded || !surface.isValid || !File(romPath).isFile) return false
         return runCatching {
-            nativeStart(surface, romPath, systemDir, saveDir)
+            nativeStart(surface, romPath, systemDir, saveDir, internalResolution.coerceIn(1, 2))
         }.getOrDefault(false)
     }
 
@@ -127,7 +133,9 @@ object PSPNativeBridge {
 
     private external fun nativeHasCore(): Boolean
     private external fun nativeRuntimeInfo(): String
-    private external fun nativeStart(surface: Surface, romPath: String, systemDir: String, saveDir: String): Boolean
+    private external fun nativeStart(
+        surface: Surface, romPath: String, systemDir: String, saveDir: String, internalResolution: Int
+    ): Boolean
     private external fun nativeStop()
     private external fun nativeSetPaused(paused: Boolean)
     private external fun nativeIsRunning(): Boolean
