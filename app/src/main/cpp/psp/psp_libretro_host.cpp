@@ -475,13 +475,77 @@ void LibretroHost::presentFrame() {
         static_cast<GLsizei>(framebufferHeight_));
 }
 
+bool LibretroHost::configureCoreFramebuffer(bool depth, bool stencil) {
+    if (coreFramebuffer_ == 0) return false;
+    glBindFramebuffer(GL_FRAMEBUFFER, coreFramebuffer_);
+
+    if (!depth) {
+        if (coreDepthBuffer_ != 0) {
+            glDeleteRenderbuffers(1, &coreDepthBuffer_);
+            coreDepthBuffer_ = 0;
+        }
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, 0);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+    } else {
+        if (coreDepthBuffer_ == 0) glGenRenderbuffers(1, &coreDepthBuffer_);
+        if (coreDepthBuffer_ == 0) {
+            setMessage("PSP: não foi possível alocar o buffer de profundidade.");
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            return false;
+        }
+        glBindRenderbuffer(GL_RENDERBUFFER, coreDepthBuffer_);
+        GLenum storageFormat = GL_DEPTH_COMPONENT16;
+        if (stencil) {
+#ifdef GL_DEPTH24_STENCIL8_OES
+            const char* extensions = reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS));
+            const bool packedDepthStencil =
+                extensions && std::strstr(extensions, "GL_OES_packed_depth_stencil");
+            if (!packedDepthStencil) {
+                setMessage("PSP: PPSSPP solicitou depth/stencil, mas o driver não oferece depth-stencil empacotado.");
+                glBindRenderbuffer(GL_RENDERBUFFER, 0);
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+                return false;
+            }
+            storageFormat = GL_DEPTH24_STENCIL8_OES;
+#else
+            setMessage("PSP: este build não expõe suporte a depth-stencil empacotado.");
+            glBindRenderbuffer(GL_RENDERBUFFER, 0);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            return false;
+#endif
+        }
+        glRenderbufferStorage(
+            GL_RENDERBUFFER, storageFormat,
+            static_cast<GLsizei>(framebufferWidth_),
+            static_cast<GLsizei>(framebufferHeight_));
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, coreDepthBuffer_);
+        if (stencil) {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, coreDepthBuffer_);
+        } else {
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, 0);
+        }
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    }
+
+    const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glViewport(0, 0, static_cast<GLsizei>(framebufferWidth_),
+        static_cast<GLsizei>(framebufferHeight_));
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        setMessage("PSP: framebuffer PPSSPP incompleto após configurar depth/stencil (status " +
+            std::to_string(status) + ").");
+    }
+    return status == GL_FRAMEBUFFER_COMPLETE;
+}
+
 void LibretroHost::destroyPresenter() {
     if (presenterProgram_ != 0) glDeleteProgram(presenterProgram_);
     if (coreFramebuffer_ != 0) glDeleteFramebuffers(1, &coreFramebuffer_);
     if (coreTexture_ != 0) glDeleteTextures(1, &coreTexture_);
+    if (coreDepthBuffer_ != 0) glDeleteRenderbuffers(1, &coreDepthBuffer_);
     presenterProgram_ = 0;
     coreFramebuffer_ = 0;
     coreTexture_ = 0;
+    coreDepthBuffer_ = 0;
     presenterPosition_ = -1;
     presenterTexCoord_ = -1;
     presenterSampler_ = -1;
@@ -670,6 +734,9 @@ bool LibretroHost::environment(unsigned cmd, void* data) {
             callback->get_current_framebuffer = &LibretroHost::currentFramebufferCallback;
             callback->get_proc_address = &LibretroHost::procAddressCallback;
             hwRender_ = *callback;
+            if (!configureCoreFramebuffer(callback->depth, callback->stencil)) {
+                return false;
+            }
             // PPSSPP's reset callback dereferences its global graphics context.
             // That pointer is assigned only after retro_load_game returns.
             return true;
