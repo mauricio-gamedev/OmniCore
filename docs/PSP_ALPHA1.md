@@ -1,35 +1,38 @@
-# OmniCore PSP Alpha 1
+# OmniCore PSP Alpha 1 — corrected device-test candidate
 
-## Scope
+## Status
 
-This branch integrates the upstream PPSSPP libretro core as a separate PSP backend. It is an experimental integration, and **device validation is pending**. This is not a public stable release.
+This is a corrective candidate for the experimental PPSSPP v1.20.4 runtime. The original Alpha 1 build launched the game but displayed the PSP frame in a small area near the lower-left corner. The candidate below changes OmniCore's own graphics host to render into an off-screen framebuffer and present a centered, aspect-preserving image. The updated build still needs successful CI validation and visual testing on physical hardware before the image fix is considered verified.
+
+## What changed in the corrective pass
+
+- OmniCore creates a PSP-owned OpenGL ES framebuffer and texture instead of handing PPSSPP the default Android surface framebuffer.
+- The presenter scales the rendered image to the largest rectangle that preserves the PSP 480×272 aspect ratio, centers it, and uses black letterboxing where needed. It does not stretch the image or crop PSP lines.
+- The host supplies the framebuffer requested by the PPSSPP hardware-render callback and attaches depth storage when requested, with an explicit error if the requested depth/stencil layout cannot be supported.
+- A lightweight presentation shader runs in the same PSP-owned process. It does not read frames back to the CPU.
+- The initial smart profile uses 1× internal rendering on devices with limited memory or severe thermal pressure. 2× internal resolution is selected only for devices with at least 8 GiB total RAM, at least 3 GiB currently available, no low-RAM classification, and thermal status below severe.
+- The smart profile is selected before launch and can be inspected from the in-game menu. It does not dynamically rewrite renderer options during gameplay.
+- JIT/OpenGL ES hardware rendering remain the requested baseline; fixed and automatic frame skipping stay disabled. Crop-to-16:9 and visual/performance hacks that can remove effects are explicitly disabled.
 
 ## Isolation contract
 
-- All new PSP runtime code is placed under core/psp, cpp/psp, PSPEmulationActivity, PSPGamepadOverlayView and PSP-owned storage.
-- The PSP activity runs in Android process :psp; it loads only omnicore_psp_runtime. The PPSSPP core is dynamically loaded by that runtime.
-- Existing PS1, N64 and PS2 implementations and touch overlays are protected by the workflow's baseline diff guard. Do not refactor those components as part of this integration.
-- Changes to the registry, import classifier, build version and CMake target list are limited to routing and packaging the new PSP backend.
+- PSP uses Android process `:psp` and loads only `omnicore_psp_runtime`; PPSSPP is dynamically loaded inside that process.
+- This work is restricted to PSP-owned runtime files and PSP launch integration.
+- Existing PS1, N64 and PS2 core/runtime source paths and touch overlays remain protected by the build workflow's baseline guard. Do not refactor these systems as part of the PSP work.
 
 ## Pinned upstream
 
 - Project: https://github.com/hrydgard/ppsspp
-- Tag: v1.20.4
-- Commit: fa50bb1976065c4f8b1b47af227d367fe9771555
-- Frontend: upstream libretro port, Android ARM64 and ARMv7
-- Renderer: OpenGL ES 2 hardware context through the dedicated EGL surface
-- CPU: PPSSPP libretro JIT option requested; upstream/runtime may reject JIT on devices/platforms where unsupported.
+- Tag: `v1.20.4`
+- Commit: `fa50bb1976065c4f8b1b47af227d367fe9771555`
+- Frontend: PPSSPP libretro port for Android ARM64 and ARMv7
+- Renderer: OpenGL ES hardware context through the dedicated EGL surface
 
-## Conservative initial profile
+## Import and game files
 
-- Internal rendering resolution starts at native PSP resolution (1×, 480×272).
-- Frame skipping remains disabled. No host CPU/GPU clocks, Android system properties or hidden APIs are written.
-- This branch does not add frame-timing hacks, game-memory patches or automatic quality promotion.
-- Runtime data uses independent app-private filesDir/psp paths; original game files are never overwritten.
+Supported formats are ISO, CSO and PBP. The library supports an explicit **Import as → PSP** target for these shared extensions and bounded recursive scan when a PSP folder is selected. In automatic mode, ambiguous disc extensions are not guessed to be PSP from the filename alone.
 
-## Supported import formats
-
-ISO, CSO and PBP. The Add Games dialog now has its own `Import as` selector; selecting PSP explicitly routes shared ISO/CSO/PBP extensions to the PSP core. PSP-targeted folder imports scan nested subfolders with depth/entry limits. Other systems retain the existing direct-folder scan and import behavior. In Auto mode, ambiguous disc images are not forced into PSP by suffix alone.
+Game images remain user-supplied. The app does not bundle games or proprietary firmware; original game files are not overwritten.
 
 ## Controls
 
@@ -45,12 +48,8 @@ ISO, CSO and PBP. The Add Games dialog now has its own `Import as` selector; sel
 | L / R | 10 / 11 |
 | Left analog | X / Y |
 
-The first overlay exposes the core PSP controls in a lightweight multitouch layout. Save states and advanced per-game graphics settings are not part of this first integration increment.
+## CI and physical-device gates
 
-## Assets, rights and test gates
+The PSP-only workflow builds the pinned PPSSPP core for ARM64 and ARMv7, builds/signs the APK, validates retained PS1/N64 libraries, checks the development signer and 16 KB alignment, and uploads the test artifact. The candidate is not considered complete until those checks pass.
 
-- CI copies assets from the pinned PPSSPP source snapshot, including compat.ini, and embeds the upstream license text in the APK.
-- CI packages the source snapshot used for the GPL-covered PPSSPP backend alongside the test APK.
-- No commercial games, PSP firmware dumps or other proprietary console content are bundled.
-- CI verifies package identity and signer, preservation of the existing backend libraries, and APK/ELF 16 KB alignment.
-- Physical device launch, controller feel, audio continuity, suspend/resume, thermal behavior and game compatibility must still be validated on hardware before this is considered stable.
+Physical-device checks still required: visible game image fills the intended viewport without distortion, 3D depth remains correct in scenes such as God of War, touch and physical input work, audio stays continuous, and pause/resume/relaunch do not leave a black surface. Performance gains must be measured on-device; no FPS increase is claimed from code inspection alone.
