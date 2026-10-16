@@ -24,7 +24,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: OmniCore-v0.12.0-psp-alpha1
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: 38822311970
           path: build/previous-alpha1
@@ -76,7 +76,7 @@ jobs:
 
       - name: Publish as a clearly labeled prerelease
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
