@@ -3,6 +3,7 @@
 #include <android/native_window_jni.h>
 #include <jni.h>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -36,7 +37,8 @@ Java_com_omnicore_emulator_core_psp_PSPNativeBridge_nativeStart(
     jobject surface,
     jstring romPath,
     jstring systemDir,
-    jstring saveDir) {
+    jstring saveDir,
+    jint internalResolution) {
     if (!surface) return JNI_FALSE;
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);
     if (!window) return JNI_FALSE;
@@ -45,6 +47,7 @@ Java_com_omnicore_emulator_core_psp_PSPNativeBridge_nativeStart(
     config.romPath = fromJString(env, romPath);
     config.systemDir = fromJString(env, systemDir);
     config.saveDir = fromJString(env, saveDir);
+    config.internalResolution = static_cast<unsigned>(std::clamp(internalResolution, 1, 2));
     const bool valid = !config.romPath.empty() && !config.systemDir.empty() && !config.saveDir.empty();
     const bool started = valid && omnicore::psp::LibretroHost::instance().start(window, std::move(config));
     ANativeWindow_release(window);
