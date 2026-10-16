@@ -17,15 +17,21 @@
       "version": "0.11.5 Alpha 6",
       "status": "PCSX2/ARMSX2 foundation and Visibility v1 telemetry validated in CI; physical-device testing is next",
       "tag": "v0.11.5-ps2-alpha6"
+    },
+    "psp": {
+      "label": "PSP integration preview",
+      "version": "0.12.0 Alpha 1",
+      "status": "Experimental PPSSPP v1.20.4 preview; first build has a known ROM import/discovery issue; correction is in PR #1 and CI/device validation is pending",
+      "tag": "v0.12.0-psp-alpha1"
     }
   },
   "latest": {
-    "system": "ps2",
-    "title": "PS2 Alpha 6 — PCSX2 Foundation",
-    "version": "0.11.5 Alpha 6",
-    "tag": "v0.11.5-ps2-alpha6",
-    "release_url": "https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.11.5-ps2-alpha6",
-    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.11.5-ps2-alpha6/OmniCore-v0.11.5-ps2-alpha6.apk",
-    "summary": "Alpha 6 replaces the previous Play! PS2 path with the pinned PCSX2/ARMSX2 Android ARM64 foundation, preserves the 1x quality floor and measurement-only SmartPerf policy, and adds source-built Visibility v1 GS telemetry for evidence-driven optimization on real hardware."
+    "system": "psp",
+    "title": "PSP Alpha 1 Preview — PPSSPP v1.20.4",
+    "version": "0.12.0 Alpha 1",
+    "tag": "v0.12.0-psp-alpha1",
+    "release_url": "https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.12.0-psp-alpha1",
+    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.12.0-psp-alpha1/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk",
+    "summary": "Experimental PPSSPP v1.20.4/libretro integration in the isolated :psp process, with native 1x resolution and frame skipping disabled. The published initial preview has a known PSP ROM discovery/import issue. A correction adds an explicit Import as → PSP selector and bounded recursive PSP folder scanning; CI and physical-device validation are still pending."
   }
 }
