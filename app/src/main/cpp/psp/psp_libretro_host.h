@@ -5,6 +5,7 @@
 #include <aaudio/AAudio.h>
 #include <android/native_window.h>
 #include <EGL/egl.h>
+#include <GLES2/gl2.h>
 
 #include <array>
 #include <atomic>
@@ -21,6 +22,7 @@ struct RuntimeConfig {
     std::string romPath;
     std::string systemDir;
     std::string saveDir;
+    unsigned internalResolution = 1;
 };
 
 class LibretroHost final {
@@ -67,6 +69,9 @@ private:
     bool loadApi();
     void resetApi();
     bool initEgl();
+    bool initPresenter();
+    void presentFrame();
+    void destroyPresenter();
     void destroyEgl();
     void startAudio();
     void stopAudio();
@@ -97,6 +102,14 @@ private:
     EGLDisplay display_ = EGL_NO_DISPLAY;
     EGLSurface eglSurface_ = EGL_NO_SURFACE;
     EGLContext eglContext_ = EGL_NO_CONTEXT;
+    GLuint coreFramebuffer_ = 0;
+    GLuint coreTexture_ = 0;
+    GLuint presenterProgram_ = 0;
+    GLint presenterPosition_ = -1;
+    GLint presenterTexCoord_ = -1;
+    GLint presenterSampler_ = -1;
+    unsigned framebufferWidth_ = 480;
+    unsigned framebufferHeight_ = 272;
     abi::retro_hw_render_callback hwRender_{};
     bool hwContextInitialized_ = false;
 
