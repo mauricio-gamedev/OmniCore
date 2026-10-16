@@ -1,10 +1,6 @@
 name: Publish previous PSP Alpha 1 preview
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - ".github/workflows/publish-psp-alpha1-preview.yml"
   workflow_dispatch:
 
 permissions:
@@ -76,10 +72,17 @@ jobs:
 
       - name: Publish as a clearly labeled prerelease
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.OMNICORE_RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::Add repository Actions secret OMNICORE_RELEASE_TOKEN with Contents read/write permission, then run this workflow manually."
+            exit 1
+          fi
+
+          gh auth status
 
           TAG="v0.12.0-psp-alpha1"
           BUILD_COMMIT="73ec758b800a2721089256a8923c1dc33e053395"
