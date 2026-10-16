@@ -163,10 +163,10 @@ Third-party components remain governed by their own licenses. PCSX-ReARMed, Mupe
 
 1. Complete CI and physical-device validation of the PSP framebuffer/presentation correction; verify depth, aspect ratio and the startup profile.
 2. Complete physical-device retest of the corrected PS2 Alpha 5 build.
-2. Verify repeated game launch after sustained slow-motion no longer produces a black screen.
-3. Measure remaining PS2 stutter/slow-motion without lowering the requested internal resolution.
-4. Verify hub tab/scroll fluidity after removing continuous background animation.
-5. Keep PS1/N64 protected while applying only evidence-driven PS2 corrections.
+3. Verify repeated game launch after sustained slow-motion no longer produces a black screen.
+4. Measure remaining PS2 stutter/slow-motion without lowering the requested internal resolution.
+5. Verify hub tab/scroll fluidity after removing continuous background animation.
+6. Keep PS1/N64 protected while applying only evidence-driven PS2 corrections.
 
 ---
 
