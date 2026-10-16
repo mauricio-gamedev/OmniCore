@@ -22,6 +22,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.omnicore.emulator.core.psp.PSPNativeBridge
 import com.omnicore.emulator.core.psp.PSPRomPreparer
+import com.omnicore.emulator.core.psp.PSPSmartProfile
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.storage.PSPStorage
@@ -45,6 +46,7 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
     }
 
     private lateinit var currentGame: GameEntry
+    private lateinit var smartProfile: PSPSmartProfile.Profile
     @Volatile private var destroyed = false
     @Volatile private var activityResumed = false
     @Volatile private var surfaceReady = false
@@ -96,6 +98,7 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
             finish()
             return
         }
+        smartProfile = PSPSmartProfile.select(this)
         buildUi()
         handler.post(statusPoll)
         prepareGameAsync(currentGame)
@@ -197,7 +200,7 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
 
         val generation = surfaceGeneration
         startupInProgress = true
-        statusView.text = "PSP • iniciando PPSSPP v1.20.4…"
+        statusView.text = "PSP • ${smartProfile.label} (${smartProfile.internalResolution}×) • iniciando…"
         statusView.setBackgroundColor(Color.argb(185, 12, 16, 29))
         worker.execute {
             var success = false
@@ -210,7 +213,8 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
                         surface = surface,
                         romPath = rom.absolutePath,
                         systemDir = paths.system.absolutePath,
-                        saveDir = paths.saves.absolutePath
+                        saveDir = paths.saves.absolutePath,
+                        internalResolution = smartProfile.internalResolution
                     )
                     if (!success) failure = PSPNativeBridge.lastMessage()
                 } else {
@@ -253,7 +257,8 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
             menu.add(0, MENU_PAUSE, 0, if (manualPaused) "Continuar jogo" else "Pausar jogo")
             menu.add(0, MENU_CONTROLS, 1, if (controlsVisible) "Ocultar controles touch" else "Mostrar controles touch")
             menu.add(0, MENU_STATUS, 2, if (statusVisible) "Ocultar status" else "Mostrar status")
-            menu.add(0, MENU_EXIT, 3, "Sair do jogo")
+            menu.add(0, MENU_PROFILE, 3, "Perfil inteligente")
+            menu.add(0, MENU_EXIT, 4, "Sair do jogo")
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_PAUSE -> {
@@ -277,6 +282,14 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
                     MENU_STATUS -> {
                         statusVisible = !statusVisible
                         statusView.visibility = if (statusVisible) View.VISIBLE else View.GONE
+                        true
+                    }
+                    MENU_PROFILE -> {
+                        Toast.makeText(
+                            this@PSPEmulationActivity,
+                            smartProfile.summary,
+                            Toast.LENGTH_LONG
+                        ).show()
                         true
                     }
                     MENU_EXIT -> {
@@ -450,7 +463,8 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
         private const val MENU_PAUSE = 1
         private const val MENU_CONTROLS = 2
         private const val MENU_STATUS = 3
-        private const val MENU_EXIT = 4
+        private const val MENU_PROFILE = 4
+        private const val MENU_EXIT = 5
 
         private const val EXTRA_GAME_ID = "psp_game_id"
         private const val EXTRA_GAME_TITLE = "psp_game_title"
