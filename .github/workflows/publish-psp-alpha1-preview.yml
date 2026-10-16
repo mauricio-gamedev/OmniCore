@@ -1,0 +1,128 @@
+name: Publish previous PSP Alpha 1 preview
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/publish-psp-alpha1-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-psp-alpha1-preview
+  cancel-in-progress: false
+
+jobs:
+  publish-known-issue-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Download the exact previously tested CI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: OmniCore-v0.12.0-psp-alpha1
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 38822311970
+          path: build/previous-alpha1
+
+      - name: Verify original artifact and prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ARTIFACT_DIR="$GITHUB_WORKSPACE/build/previous-alpha1"
+          APK="$(find "$ARTIFACT_DIR" -type f -name 'app-release.apk' -print -quit)"
+          SOURCE="$(find "$ARTIFACT_DIR" -type f -name 'ppsspp-v1.20.4-source.tar.gz' -print -quit)"
+          INFO="$(find "$ARTIFACT_DIR" -type f -name 'ppsspp-build-info.txt' -print -quit)"
+          BADGING="$(find "$ARTIFACT_DIR" -type f -name 'apk-badging.txt' -print -quit)"
+          CERT="$(find "$ARTIFACT_DIR" -type f -name 'apk-cert.txt' -print -quit)"
+
+          test -s "$APK"
+          test -s "$SOURCE"
+          test -s "$INFO"
+          test -s "$BADGING"
+          test -s "$CERT"
+
+          grep -Fq "package: name='com.omnicore.emulator' versionCode='53' versionName='0.12.0-psp-alpha1'" "$BADGING"
+          grep -Fqx 'PPSSPP_TAG=v1.20.4' "$INFO"
+          grep -Fqx 'PPSSPP_COMMIT=fa50bb1976065c4f8b1b47af227d367fe9771555' "$INFO"
+          grep -Fq 'Signer #1 certificate SHA-256 digest:' "$CERT"
+
+          unzip -tqq "$APK"
+          tar -tzf "$SOURCE" >/dev/null
+
+          OUT="$GITHUB_WORKSPACE/build/release-assets"
+          mkdir -p "$OUT"
+          APK_NAME="OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk"
+          SOURCE_NAME="ppsspp-v1.20.4-source.tar.gz"
+          cp "$APK" "$OUT/$APK_NAME"
+          cp "$SOURCE" "$OUT/$SOURCE_NAME"
+          cp "$INFO" "$OUT/ppsspp-build-info.txt"
+          cp "$BADGING" "$OUT/apk-badging.txt"
+          cp "$CERT" "$OUT/apk-cert.txt"
+
+          (
+            cd "$OUT"
+            sha256sum "$APK_NAME" > "$APK_NAME.sha256"
+            sha256sum "$SOURCE_NAME" > "$SOURCE_NAME.sha256"
+          )
+
+          echo "RELEASE_ASSETS_READY"
+          ls -lh "$OUT"
+
+      - name: Publish as a clearly labeled prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="v0.12.0-psp-alpha1"
+          BUILD_COMMIT="73ec758b800a2721089256a8923c1dc33e053395"
+          ASSETS="$GITHUB_WORKSPACE/build/release-assets"
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; refusing to replace or overwrite it."
+            exit 1
+          fi
+
+          cat > "$ASSETS/release-notes.md" <<'NOTES'
+          # OmniCore v0.12.0 — PSP Alpha 1 preview
+
+          **Prerelease / experimental. This is the previously tested build, published for reference. It is not the corrected import build.**
+
+          ## Included
+          - PPSSPP v1.20.4 through its upstream libretro frontend.
+          - PSP-owned native runtime and Android process com.omnicore.emulator:psp.
+          - Native PSP resolution (1×) as the initial profile; frame skipping remains disabled.
+          - ARM64 and ARMv7 native packaging.
+          - APK and PPSSPP corresponding source archive, with SHA-256 checksums and build metadata.
+
+          ## Known issue — do not use this build to validate library importing
+          Device testing found that PSP games were not being recognized/imported by the library in this initial APK. A correction is being worked on in PR #1: explicit **Import as → PSP** selection for shared ISO/CSO/PBP formats and a bounded recursive scan when importing a PSP folder.
+
+          The corrected build is separate and must pass CI and device validation before it is advertised as fixed. This release is kept as the exact earlier build for traceability, not as a stable recommendation.
+
+          Build commit: 73ec758b800a2721089256a8923c1dc33e053395  
+          PPSSPP commit: fa50bb1976065c4f8b1b47af227d367fe9771555
+
+          No commercial games, PSP firmware, ROMs or proprietary console assets are included.
+          NOTES
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$BUILD_COMMIT" \
+            --prerelease \
+            --title "OmniCore v0.12.0 — PSP Alpha 1 (known import issue)" \
+            --notes-file "$ASSETS/release-notes.md" \
+            "$ASSETS/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk" \
+            "$ASSETS/OmniCore-v0.12.0-psp-alpha1-pre-import-fix.apk.sha256" \
+            "$ASSETS/ppsspp-v1.20.4-source.tar.gz" \
+            "$ASSETS/ppsspp-v1.20.4-source.tar.gz.sha256" \
+            "$ASSETS/ppsspp-build-info.txt" \
+            "$ASSETS/apk-badging.txt" \
+            "$ASSETS/apk-cert.txt"
