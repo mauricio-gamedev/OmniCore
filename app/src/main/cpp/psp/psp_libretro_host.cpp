@@ -72,6 +72,28 @@ int androidPriority(enum retro_log_level level) {
     }
 }
 
+GLuint compilePresenterShader(GLenum type, const char* source, std::string& error) {
+    const GLuint shader = glCreateShader(type);
+    if (shader == 0) {
+        error = "glCreateShader retornou zero";
+        return 0;
+    }
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled != GL_TRUE) {
+        char log[1024]{};
+        GLsizei length = 0;
+        glGetShaderInfoLog(shader, static_cast<GLsizei>(sizeof(log)), &length, log);
+        error = length > 0 ? std::string(log, static_cast<std::size_t>(length))
+                           : "erro de compilação sem log";
+        glDeleteShader(shader);
+        return 0;
+    }
+    return shader;
+}
+
 }  // namespace
 
 LibretroHost* LibretroHost::active_ = nullptr;
@@ -286,7 +308,187 @@ bool LibretroHost::initEgl() {
     return true;
 }
 
+bool LibretroHost::initPresenter() {
+    if (display_ == EGL_NO_DISPLAY || eglContext_ == EGL_NO_CONTEXT) {
+        setMessage("PSP: contexto EGL ausente para inicializar o apresentador.");
+        return false;
+    }
+
+    const unsigned scale = std::clamp(config_.internalResolution, 1u, 2u);
+    framebufferWidth_ = 480u * scale;
+    framebufferHeight_ = 272u * scale;
+
+    static constexpr char vertexSource[] =
+        "attribute vec2 aPosition;\n"
+        "attribute vec2 aTexCoord;\n"
+        "varying vec2 vTexCoord;\n"
+        "void main() { gl_Position = vec4(aPosition, 0.0, 1.0); vTexCoord = aTexCoord; }\n";
+    static constexpr char fragmentSource[] =
+        "precision mediump float;\n"
+        "uniform sampler2D uFrame;\n"
+        "varying vec2 vTexCoord;\n"
+        "void main() { gl_FragColor = texture2D(uFrame, vTexCoord); }\n";
+
+    std::string shaderError;
+    const GLuint vertexShader = compilePresenterShader(GL_VERTEX_SHADER, vertexSource, shaderError);
+    if (vertexShader == 0) {
+        setMessage("PSP: falha no shader de apresentação: " + shaderError);
+        return false;
+    }
+    const GLuint fragmentShader = compilePresenterShader(GL_FRAGMENT_SHADER, fragmentSource, shaderError);
+    if (fragmentShader == 0) {
+        glDeleteShader(vertexShader);
+        setMessage("PSP: falha no shader de imagem: " + shaderError);
+        return false;
+    }
+
+    presenterProgram_ = glCreateProgram();
+    if (presenterProgram_ == 0) {
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+        setMessage("PSP: não foi possível criar o programa de apresentação.");
+        return false;
+    }
+    glAttachShader(presenterProgram_, vertexShader);
+    glAttachShader(presenterProgram_, fragmentShader);
+    glBindAttribLocation(presenterProgram_, 0, "aPosition");
+    glBindAttribLocation(presenterProgram_, 1, "aTexCoord");
+    glLinkProgram(presenterProgram_);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(presenterProgram_, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        char log[1024]{};
+        GLsizei length = 0;
+        glGetProgramInfoLog(presenterProgram_, static_cast<GLsizei>(sizeof(log)), &length, log);
+        setMessage("PSP: falha ao vincular shader de apresentação: " +
+            (length > 0 ? std::string(log, static_cast<std::size_t>(length)) : std::string("sem log")));
+        destroyPresenter();
+        return false;
+    }
+
+    presenterPosition_ = glGetAttribLocation(presenterProgram_, "aPosition");
+    presenterTexCoord_ = glGetAttribLocation(presenterProgram_, "aTexCoord");
+    presenterSampler_ = glGetUniformLocation(presenterProgram_, "uFrame");
+    if (presenterPosition_ < 0 || presenterTexCoord_ < 0 || presenterSampler_ < 0) {
+        setMessage("PSP: o shader de apresentação não expôs os atributos esperados.");
+        destroyPresenter();
+        return false;
+    }
+
+    glGenTextures(1, &coreTexture_);
+    glBindTexture(GL_TEXTURE_2D, coreTexture_);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA,
+        static_cast<GLsizei>(framebufferWidth_),
+        static_cast<GLsizei>(framebufferHeight_),
+        0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    glGenFramebuffers(1, &coreFramebuffer_);
+    glBindFramebuffer(GL_FRAMEBUFFER, coreFramebuffer_);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, coreTexture_, 0);
+    const GLenum framebufferStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+
+    if (coreFramebuffer_ == 0 || coreTexture_ == 0 || framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
+        setMessage("PSP: framebuffer de apresentação incompleto (status " +
+            std::to_string(framebufferStatus) + ").");
+        destroyPresenter();
+        return false;
+    }
+    return true;
+}
+
+void LibretroHost::presentFrame() {
+    if (presenterProgram_ == 0 || coreFramebuffer_ == 0 || coreTexture_ == 0 ||
+        display_ == EGL_NO_DISPLAY || eglSurface_ == EGL_NO_SURFACE) {
+        return;
+    }
+
+    EGLint surfaceWidth = 0;
+    EGLint surfaceHeight = 0;
+    if (eglQuerySurface(display_, eglSurface_, EGL_WIDTH, &surfaceWidth) != EGL_TRUE ||
+        eglQuerySurface(display_, eglSurface_, EGL_HEIGHT, &surfaceHeight) != EGL_TRUE ||
+        surfaceWidth <= 0 || surfaceHeight <= 0) {
+        return;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, surfaceWidth, surfaceHeight);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_BLEND);
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    const float sourceAspect =
+        static_cast<float>(framebufferWidth_) / static_cast<float>(framebufferHeight_);
+    const float surfaceAspect = static_cast<float>(surfaceWidth) / static_cast<float>(surfaceHeight);
+    float scaleX = 1.0f;
+    float scaleY = 1.0f;
+    if (surfaceAspect > sourceAspect) {
+        scaleX = sourceAspect / surfaceAspect;
+    } else {
+        scaleY = surfaceAspect / sourceAspect;
+    }
+
+    const GLfloat vertices[] = {
+        -scaleX, -scaleY, 0.0f, 0.0f,
+         scaleX, -scaleY, 1.0f, 0.0f,
+        -scaleX,  scaleY, 0.0f, 1.0f,
+         scaleX,  scaleY, 1.0f, 1.0f
+    };
+    glUseProgram(presenterProgram_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, coreTexture_);
+    glUniform1i(presenterSampler_, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glEnableVertexAttribArray(static_cast<GLuint>(presenterPosition_));
+    glEnableVertexAttribArray(static_cast<GLuint>(presenterTexCoord_));
+    glVertexAttribPointer(
+        static_cast<GLuint>(presenterPosition_), 2, GL_FLOAT, GL_FALSE,
+        4 * static_cast<GLsizei>(sizeof(GLfloat)), vertices);
+    glVertexAttribPointer(
+        static_cast<GLuint>(presenterTexCoord_), 2, GL_FLOAT, GL_FALSE,
+        4 * static_cast<GLsizei>(sizeof(GLfloat)), vertices + 2);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glDisableVertexAttribArray(static_cast<GLuint>(presenterPosition_));
+    glDisableVertexAttribArray(static_cast<GLuint>(presenterTexCoord_));
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
+
+    // The core renders into an OmniCore-owned off-screen framebuffer on the
+    // next retro_run; only the final scaled quad touches the Android surface.
+    glBindFramebuffer(GL_FRAMEBUFFER, coreFramebuffer_);
+    glViewport(0, 0, static_cast<GLsizei>(framebufferWidth_),
+        static_cast<GLsizei>(framebufferHeight_));
+}
+
+void LibretroHost::destroyPresenter() {
+    if (presenterProgram_ != 0) glDeleteProgram(presenterProgram_);
+    if (coreFramebuffer_ != 0) glDeleteFramebuffers(1, &coreFramebuffer_);
+    if (coreTexture_ != 0) glDeleteTextures(1, &coreTexture_);
+    presenterProgram_ = 0;
+    coreFramebuffer_ = 0;
+    coreTexture_ = 0;
+    presenterPosition_ = -1;
+    presenterTexCoord_ = -1;
+    presenterSampler_ = -1;
+}
+
 void LibretroHost::destroyEgl() {
+    destroyPresenter();
     if (display_ != EGL_NO_DISPLAY) {
         eglMakeCurrent(display_, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
         if (eglSurface_ != EGL_NO_SURFACE) {
@@ -404,12 +606,20 @@ void LibretroHost::registerOptions(const retro_variable* variables) {
         std::string selected = trim(choices.substr(0, separator));
         if (!selected.empty()) options_[variables[i].key] = selected;
     }
+    const unsigned scale = std::clamp(config_.internalResolution, 1u, 2u);
     options_["ppsspp_backend"] = "opengl";
     options_["ppsspp_cpu_core"] = "JIT";
-    options_["ppsspp_internal_resolution"] = "480x272";
+    options_["ppsspp_internal_resolution"] =
+        std::to_string(480u * scale) + "x" + std::to_string(272u * scale);
     options_["ppsspp_software_rendering"] = "disabled";
     options_["ppsspp_frameskip"] = "disabled";
     options_["ppsspp_auto_frameskip"] = "disabled";
+    options_["ppsspp_cropto16x9"] = "disabled";
+    options_["ppsspp_cache_iso"] = "disabled";
+    options_["ppsspp_skip_buffer_effects"] = "disabled";
+    options_["ppsspp_skip_gpu_readbacks"] = "disabled";
+    options_["ppsspp_lazy_texture_caching"] = "disabled";
+    options_["ppsspp_gpu_hardware_transform"] = "enabled";
 }
 
 const char* LibretroHost::optionValue(const char* key) {
@@ -556,6 +766,10 @@ void LibretroHost::run() {
             markStartup(false, lastMessage());
             goto cleanup;
         }
+        if (!initPresenter()) {
+            markStartup(false, lastMessage());
+            goto cleanup;
+        }
         if (!loadApi()) {
             markStartup(false, lastMessage());
             goto cleanup;
@@ -620,9 +834,13 @@ void LibretroHost::run() {
                     nextFrame = std::chrono::steady_clock::now();
                     continue;
                 }
+                glBindFramebuffer(GL_FRAMEBUFFER, coreFramebuffer_);
+                glViewport(0, 0, static_cast<GLsizei>(framebufferWidth_),
+                    static_cast<GLsizei>(framebufferHeight_));
                 api_.run();
                 if (stopRequested_.load(std::memory_order_acquire)) break;
                 if (display_ != EGL_NO_DISPLAY && eglSurface_ != EGL_NO_SURFACE) {
+                    presentFrame();
                     if (eglSwapBuffers(display_, eglSurface_) != EGL_TRUE) {
                         setMessage("A superfície gráfica do PSP foi perdida.");
                         break;
@@ -705,7 +923,7 @@ std::int16_t LibretroHost::inputStateCallback(unsigned port, unsigned device, un
 }
 
 std::uintptr_t LibretroHost::currentFramebufferCallback() {
-    return 0;
+    return active_ ? static_cast<std::uintptr_t>(active_->coreFramebuffer_) : 0;
 }
 
 abi::retro_proc_address_t LibretroHost::procAddressCallback(const char* symbol) {
