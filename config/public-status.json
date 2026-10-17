@@ -19,19 +19,24 @@
       "tag": "v0.11.5-ps2-alpha6"
     },
     "psp": {
-      "label": "PSP integration preview",
+      "label": "PSP experimental preview",
       "version": "0.12.0 Alpha 1",
-      "status": "Experimental PPSSPP v1.20.4 preview; known ROM import/discovery issue; corrected build pending CI/device validation; previous APK is temporarily available as the successful GitHub Actions artifact because release publication was blocked by token permissions.",
-      "tag": "v0.12.0-psp-alpha1"
+      "status": "Published known-issue preview under the current tag AlphaExperimental. The corrective PSP branch now includes image-presentation work, graphics preferences and configurable touch controls; latest CI build is running and device validation is pending.",
+      "tag": "AlphaExperimental"
     }
   },
   "latest": {
     "system": "psp",
-    "title": "PSP Alpha 1 Preview — PPSSPP v1.20.4",
+    "title": "PSP Alpha 1 — original experimental preview",
     "version": "0.12.0 Alpha 1",
-    "tag": "v0.12.0-psp-alpha1",
-    "release_url": "https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970",
-    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970",
-    "summary": "Experimental PPSSPP v1.20.4/libretro integration in the isolated :psp process, with native 1x resolution and frame skipping disabled. The published initial preview has a known PSP ROM discovery/import issue. A correction adds an explicit Import as → PSP selector and bounded recursive PSP folder scanning; CI and physical-device validation are still pending. The previous successful build is available as a GitHub Actions artifact; the release tag has not been published because GitHub denied release creation to the workflow token."
+    "tag": "AlphaExperimental",
+    "release_url": "https://github.com/mauricio-gamedev/OmniCore/releases/tag/AlphaExperimental",
+    "apk_url": "https://github.com/mauricio-gamedev/OmniCore/releases/download/AlphaExperimental/OmniCore.PSP.Alpha.1.Preview",
+    "summary": "This is the original PPSSPP v1.20.4 preview APK, not the newer corrective candidate. It has known image scaling/positioning and game-library import/discovery issues. The PSP-only development branch now contains an OmniCore-owned image presentation fix, conservative smart internal-resolution selection, a graphics menu, saved 1×/2×/automatic resolution choice, and configurable touch-control size, opacity and intelligent opacity. The latest build is being validated in CI; physical-device validation remains pending. A native Vulkan backend is planned but is not implemented in this release."
+  },
+  "next_update": {
+    "title": "PSP graphics and touch-control configuration",
+    "status": "In development — CI running; physical-device verification pending",
+    "summary": "The PSP branch adds aspect-preserving framebuffer presentation, conservative device-aware resolution selection, persistent graphics resolution settings, touch-control size and opacity controls, and intelligent opacity. Vulkan is a separate future backend task and must not be presented as supported until it is genuinely implemented and tested."
   }
 }
