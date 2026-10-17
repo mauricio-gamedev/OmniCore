@@ -9,14 +9,6 @@ object PSPSettings {
     private const val KEY_CONTROL_OPACITY = "control_opacity"
     private const val KEY_CONTROL_SIZE = "control_size"
     private const val KEY_SMART_OPACITY = "smart_opacity"
-    private const val KEY_RENDERER = "renderer"
-
-    enum class Renderer(val storage: String, val label: String) {
-        AUTO("auto", "Automático"),
-        OPENGL("opengl", "OpenGL ES"),
-        VULKAN("vulkan", "Vulkan (experimental)")
-    }
-
     fun internalResolution(context: Context, fallback: Int): Int =
         prefs(context).getInt(KEY_INTERNAL_RESOLUTION, fallback).coerceIn(1, 2)
 
@@ -45,14 +37,6 @@ object PSPSettings {
         prefs(context).edit().putBoolean(KEY_SMART_OPACITY, enabled).apply()
     }
 
-    fun renderer(context: Context): Renderer {
-        val raw = prefs(context).getString(KEY_RENDERER, Renderer.AUTO.storage)
-        return Renderer.entries.firstOrNull { it.storage == raw } ?: Renderer.AUTO
-    }
-
-    fun saveRenderer(context: Context, renderer: Renderer) {
-        prefs(context).edit().putString(KEY_RENDERER, renderer.storage).apply()
-    }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
