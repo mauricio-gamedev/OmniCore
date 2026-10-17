@@ -9,11 +9,12 @@ object PSPSettings {
     private const val KEY_CONTROL_OPACITY = "control_opacity"
     private const val KEY_CONTROL_SIZE = "control_size"
     private const val KEY_SMART_OPACITY = "smart_opacity"
-    fun internalResolution(context: Context, fallback: Int): Int =
-        prefs(context).getInt(KEY_INTERNAL_RESOLUTION, fallback).coerceIn(1, 2)
+    /** 0 = smart/automatic, 1 = native 480×272, 2 = 2× 960×544. */
+    fun internalResolution(context: Context): Int =
+        prefs(context).getInt(KEY_INTERNAL_RESOLUTION, 0).coerceIn(0, 2)
 
     fun saveInternalResolution(context: Context, value: Int) {
-        prefs(context).edit().putInt(KEY_INTERNAL_RESOLUTION, value.coerceIn(1, 2)).apply()
+        prefs(context).edit().putInt(KEY_INTERNAL_RESOLUTION, value.coerceIn(0, 2)).apply()
     }
 
     fun controlOpacity(context: Context): Int =
