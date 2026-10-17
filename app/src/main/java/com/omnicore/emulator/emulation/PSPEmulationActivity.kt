@@ -18,6 +18,9 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.PopupMenu
+import android.widget.SeekBar
+import android.widget.LinearLayout
+import android.app.AlertDialog
 import android.widget.TextView
 import android.widget.Toast
 import com.omnicore.emulator.core.psp.PSPNativeBridge
@@ -26,6 +29,7 @@ import com.omnicore.emulator.core.psp.PSPSmartProfile
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.storage.PSPStorage
+import com.omnicore.emulator.settings.PSPSettings
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -258,7 +262,9 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
             menu.add(0, MENU_CONTROLS, 1, if (controlsVisible) "Ocultar controles touch" else "Mostrar controles touch")
             menu.add(0, MENU_STATUS, 2, if (statusVisible) "Ocultar status" else "Mostrar status")
             menu.add(0, MENU_PROFILE, 3, "Perfil inteligente")
-            menu.add(0, MENU_EXIT, 4, "Sair do jogo")
+            menu.add(0, MENU_GRAPHICS, 4, "Configurações gráficas")
+            menu.add(0, MENU_CONTROLS_SETTINGS, 5, "Configurar controles touch")
+            menu.add(0, MENU_EXIT, 6, "Sair do jogo")
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     MENU_PAUSE -> {
@@ -292,6 +298,14 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
                         ).show()
                         true
                     }
+                    MENU_GRAPHICS -> {
+                        showGraphicsSettings()
+                        true
+                    }
+                    MENU_CONTROLS_SETTINGS -> {
+                        showControlsSettings()
+                        true
+                    }
                     MENU_EXIT -> {
                         finish()
                         true
@@ -301,6 +315,82 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
             }
             show()
         }
+    }
+
+    private fun showGraphicsSettings() {
+        val options = arrayOf("Automático (perfil inteligente)", "Resolução interna 1× (480×272)", "Resolução interna 2× (960×544)")
+        val current = PSPSettings.internalResolution(this, smartProfile.internalResolution)
+        AlertDialog.Builder(this)
+            .setTitle("Gráficos do PSP")
+            .setSingleChoiceItems(options, if (current == 1) 1 else 2) { dialog, which ->
+                val selected = when (which) {
+                    0 -> PSPSmartProfile.select(this).internalResolution
+                    1 -> 1
+                    else -> 2
+                }
+                PSPSettings.saveInternalResolution(this, selected)
+                Toast.makeText(this, "A resolução será aplicada na próxima inicialização do jogo.", Toast.LENGTH_LONG).show()
+                dialog.dismiss()
+            }
+            .setNegativeButton("Fechar", null)
+            .show()
+    }
+
+    private fun showControlsSettings() {
+        val density = resources.displayMetrics.density
+        val padding = (16 * density).toInt()
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(padding, padding, padding, padding)
+        }
+        val opacityLabel = TextView(this).apply { textSize = 14f }
+        val opacity = SeekBar(this).apply {
+            max = 80
+            progress = PSPSettings.controlOpacity(this@PSPEmulationActivity) - 20
+        }
+        val sizeLabel = TextView(this).apply { textSize = 14f }
+        val size = SeekBar(this).apply {
+            max = 70
+            progress = PSPSettings.controlSize(this@PSPEmulationActivity) - 70
+        }
+        val smart = android.widget.CheckBox(this).apply {
+            text = "Opacidade inteligente (mais discretos quando não usados)"
+            isChecked = PSPSettings.smartOpacity(this@PSPEmulationActivity)
+        }
+        fun updateLabels() {
+            opacityLabel.text = "Opacidade: ${opacity.progress + 20}%"
+            sizeLabel.text = "Tamanho dos controles: ${size.progress + 70}%"
+        }
+        opacity.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = updateLabels()
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+        size.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = updateLabels()
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+        updateLabels()
+        layout.addView(opacityLabel)
+        layout.addView(opacity)
+        layout.addView(sizeLabel)
+        layout.addView(size)
+        layout.addView(smart)
+        AlertDialog.Builder(this)
+            .setTitle("Controles touch do PSP")
+            .setView(layout)
+            .setPositiveButton("Salvar") { _, _ ->
+                val opacityValue = opacity.progress + 20
+                val sizeValue = size.progress + 70
+                val smartValue = smart.isChecked
+                PSPSettings.saveControlOpacity(this, opacityValue)
+                PSPSettings.saveControlSize(this, sizeValue)
+                PSPSettings.saveSmartOpacity(this, smartValue)
+                controls.applyControlSettings(opacityValue, sizeValue, smartValue)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -464,7 +554,9 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
         private const val MENU_CONTROLS = 2
         private const val MENU_STATUS = 3
         private const val MENU_PROFILE = 4
-        private const val MENU_EXIT = 5
+        private const val MENU_GRAPHICS = 5
+        private const val MENU_CONTROLS_SETTINGS = 6
+        private const val MENU_EXIT = 7
 
         private const val EXTRA_GAME_ID = "psp_game_id"
         private const val EXTRA_GAME_TITLE = "psp_game_title"
