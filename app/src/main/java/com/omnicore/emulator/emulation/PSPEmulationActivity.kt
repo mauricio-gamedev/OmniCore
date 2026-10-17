@@ -102,7 +102,21 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
             finish()
             return
         }
-        smartProfile = PSPSmartProfile.select(this)
+        val detectedProfile = PSPSmartProfile.select(this)
+        val savedResolution = PSPSettings.internalResolution(this)
+        smartProfile = when (savedResolution) {
+            1 -> detectedProfile.copy(
+                internalResolution = 1,
+                label = "Resolução manual 1×",
+                reason = "resolução interna escolhida manualmente"
+            )
+            2 -> detectedProfile.copy(
+                internalResolution = 2,
+                label = "Resolução manual 2×",
+                reason = "resolução interna escolhida manualmente"
+            )
+            else -> detectedProfile
+        }
         buildUi()
         handler.post(statusPoll)
         prepareGameAsync(currentGame)
@@ -319,16 +333,11 @@ class PSPEmulationActivity : Activity(), SurfaceHolder.Callback {
 
     private fun showGraphicsSettings() {
         val options = arrayOf("Automático (perfil inteligente)", "Resolução interna 1× (480×272)", "Resolução interna 2× (960×544)")
-        val current = PSPSettings.internalResolution(this, smartProfile.internalResolution)
+        val current = PSPSettings.internalResolution(this)
         AlertDialog.Builder(this)
             .setTitle("Gráficos do PSP")
-            .setSingleChoiceItems(options, if (current == 1) 1 else 2) { dialog, which ->
-                val selected = when (which) {
-                    0 -> PSPSmartProfile.select(this).internalResolution
-                    1 -> 1
-                    else -> 2
-                }
-                PSPSettings.saveInternalResolution(this, selected)
+            .setSingleChoiceItems(options, current) { dialog, which ->
+                PSPSettings.saveInternalResolution(this, which)
                 Toast.makeText(this, "A resolução será aplicada na próxima inicialização do jogo.", Toast.LENGTH_LONG).show()
                 dialog.dismiss()
             }
