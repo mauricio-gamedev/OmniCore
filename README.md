@@ -6,7 +6,7 @@
 [![Stable DEV](https://img.shields.io/badge/stable%20DEV-0.9.4-57D8FF)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.9.4-dev)
 [![N64 Alpha](https://img.shields.io/badge/N64%20alpha-0.10.23%20Alpha%2024-9879FF)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.10.23-n64-alpha24)
 [![PS2 Alpha](https://img.shields.io/badge/PS2%20alpha-0.11.5%20Alpha%206-FF6A5F)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.11.5-ps2-alpha6)
-[![PSP Alpha](https://img.shields.io/badge/PSP%20preview-0.12.0%20Alpha%201-F6C85F)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.12.0-psp-alpha1)
+[![PSP Alpha](https://img.shields.io/badge/PSP%20preview-0.12.0%20Alpha%201-F6C85F)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/AlphaExperimental)
 [![Native](https://img.shields.io/badge/native-16%20KB%20ready-3DDC84)](app/src/main/cpp/)
 [![Copyright](https://img.shields.io/badge/copyright-%C2%A9%202026%20%40mauricio--gamedev-6C63FF)](COPYRIGHT.md)
 
@@ -19,20 +19,66 @@ OmniCore is a **multi-system Android emulation hub**. Each console owns its runt
 |---|---:|---|
 | Stable DEV | **0.9.4** | PS1 gameplay, video, audio and controls device validated |
 | N64 maintenance | **0.10.23 Alpha 24** | Gameplay baseline protected; startup-only audio polish remains non-blocking |
-| PS2 device-test | **0.11.5 Alpha 6** | PCSX2/ARMSX2 foundation and Visibility v1 telemetry validated in CI; physical-device testing is next |
-| PSP integration preview | **0.12.0 Alpha 1** | PPSSPP v1.20.4 preview published; first build has a known ROM-import/discovery issue; fix is in PR #1 and CI is pending |
+| PS2 device-test | **0.11.5 Alpha 6** | PCSX2/ARMSX2 foundation and Visibility v1 telemetry validated in CI; physical-device testing remains ongoing |
+| PSP experimental preview | **0.12.0 Alpha 1** | Older preview published with known image/import issues; new PSP-only graphics/touch candidate is in CI and awaits physical-device validation. |
 
-### Latest experimental integration — PSP Alpha 1 preview
+### Latest milestone — PSP Alpha 1 — original experimental preview
 
-**OmniCore v0.12.0 PSP Alpha 1** introduces an isolated PPSSPP v1.20.4/libretro runtime in Android process `com.omnicore.emulator:psp`, with PSP-specific native hosting, touch controls, app-private save/storage paths and ARM64 + ARMv7 packaging. The initial profile uses native PSP resolution (1×) and keeps frame skipping disabled.
+**OmniCore 0.12.0 Alpha 1** is the older PPSSPP v1.20.4/libretro preview. It does not contain the current framebuffer/presentation correction or the new graphics/touch settings.
 
-> **Known issue in the downloadable preview:** the first Alpha 1 build did not reliably discover/import PSP images from the library. The fix now in [PR #1](https://github.com/mauricio-gamedev/OmniCore/pull/1) adds an explicit **Import as → PSP** choice for shared ISO/CSO/PBP formats and a bounded recursive scan when a PSP folder is selected. That corrected build has not yet completed CI/device validation, so the previous APK is published only as a **known-issue prerelease**.
+### Next PSP update — graphics and touch-control configuration
 
-The PSP integration is deliberately isolated: PS1, N64 and PS2 runtime implementations are not being refactored as part of this work. No games, PSP firmware or proprietary content are bundled.
+**Status:** In development — latest follow-up CI running; physical-device validation pending.
 
-- [Previous Alpha 1 build artifact in GitHub Actions](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970) — open the run and download the `OmniCore-v0.12.0-psp-alpha1` artifact. The release tag has not been published yet because GitHub blocked the release-creation token.
-- [Current import-fix CI run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38826858199)
-- [PSP integration pull request](https://github.com/mauricio-gamedev/OmniCore/pull/1)
+The candidate adds aspect-preserving image presentation, conservative smart internal-resolution selection, a graphics menu with automatic / 1× / 2× options, and persistent touch-control size, opacity and intelligent-opacity settings. Fixed and automatic frame skipping stay disabled.
+
+**Vulkan is not implemented yet.** The native host still requests OpenGL ES. Vulkan requires a separate, real backend and must not be advertised as supported before build and device validation.
+
+### Downloads
+
+**Published PSP Alpha 1 preview (known issues)**  
+[Release page](https://github.com/mauricio-gamedev/OmniCore/releases/tag/AlphaExperimental) · [Direct APK download](https://github.com/mauricio-gamedev/OmniCore/releases/download/AlphaExperimental/OmniCore.PSP.Alpha.1.Preview)
+
+The published tag is currently `AlphaExperimental`, not the canonical versioned tag `v0.12.0-psp-alpha1`. The uploaded asset also lacks the `.apk` suffix. The downloadable APK is the older preview, not the corrective candidate.
+
+**Current corrective candidate**  
+[Latest PSP CI run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/39040941978) · [PSP integration PR](https://github.com/mauricio-gamedev/OmniCore/pull/1)
+
+Do not treat the corrective build as ready for distribution until CI and physical-device validation pass.
+
+### Public information automation
+
+The status and latest published-release links are maintained in `config/public-status.json` and synchronized by `tools/sync_public_info.py`. This block is intentionally kept small; detailed PSP/PS2 engineering notes below stay outside the generated section.
+<!-- OMNICORE_PUBLIC_STATUS_END -->
+
+### PSP Alpha 1 — published preview and next candidate
+
+The currently published PSP preview is the older Alpha 1 APK, built with PPSSPP v1.20.4/libretro in the isolated `com.omnicore.emulator:psp` process. That downloadable build still has known **image scaling/positioning** and **library import/discovery** issues.
+
+- [Published release](https://github.com/mauricio-gamedev/OmniCore/releases/tag/AlphaExperimental)
+- [Direct APK download](https://github.com/mauricio-gamedev/OmniCore/releases/download/AlphaExperimental/OmniCore.PSP.Alpha.1.Preview)
+- [PSP integration PR](https://github.com/mauricio-gamedev/OmniCore/pull/1)
+- [Latest corrective CI run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/39040941978)
+
+The published release uses the generic tag `AlphaExperimental`, not the repository's versioned pattern `v0.12.0-psp-alpha1`, and its APK asset name lacks the `.apk` suffix. The release currently targets `main`; the original preview's documented build commit is `73ec758b800a2721089256a8923c1dc33e053395`. The tag/target and filename need normalization so the source snapshot and binary are clearly associated.
+
+The current PSP-only candidate adds:
+- an OmniCore-owned OpenGL ES presentation pass intended to scale and center the PSP image while preserving 480×272 aspect ratio and depth;
+- smart internal-resolution selection with automatic / 1× / 2× choices;
+- a graphics menu with persistent resolution preference;
+- configurable touch-control size and opacity, plus intelligent opacity that dims unused controls.
+
+These features are **not in the published APK**. CI passed for the earlier graphics/touch menu commit; the latest follow-up that applies the saved automatic / 1× / 2× choice is currently being built. Image geometry, 3D depth, launch/restart, audio, mult-touch and button-release behavior still need physical-device verification.
+
+**Vulkan is not supported yet.** The current native PSP host still requests OpenGL ES. Vulkan needs a real native backend and cannot be advertised until its context creation, synchronization, presentation, fallback and device behavior are implemented and verified.
+
+The integration remains isolated from PS1, N64 and PS2. No games, PSP firmware or proprietary content are bundled.
+
+### Historical downloads
+
+- [PS2 Alpha 6 release](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.11.5-ps2-alpha6)
+- [N64 Alpha 24 release](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.10.23-n64-alpha24)
+- [Stable PS1 DEV release](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.9.4-dev)
 
 ### PS2 Alpha 6 baseline — PCSX2 Foundation
 
@@ -70,31 +116,6 @@ GitHub Actions run **32401858158** completed successfully for commit `308ea7abf9
 The successful pipeline validated the pinned PCSX2/ARMSX2 source build, protected PS1/N64 cores, the custom JNI bridge and Visibility v1 symbol, signed release APK assembly, the expected development signer, 16 KB native/APK compatibility and corresponding GPL source artifacts before publishing the Alpha 6 prerelease.
 
 Physical-device validation of this newest Alpha 6 build is **still pending**; runtime performance or visibility gains are not marked solved until they are measured on hardware.
-
-### Downloads
-
-**PSP Alpha 1 preview — known ROM import/discovery issue**  
-The prerelease tag is pending GitHub release permissions. The previous CI artifact is available from the [original successful PSP Alpha 1 build run](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38822311970); download the `OmniCore-v0.12.0-psp-alpha1` artifact there and extract the APK.
-
-**Corrected PSP import build**  
-[Build/validation status in GitHub Actions](https://github.com/mauricio-gamedev/OmniCore/actions/runs/38826858199) — do not treat it as downloadable until CI produces a new artifact and device testing confirms the fix.
-
-**PS2 Alpha 6 prerelease**  
-https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.11.5-ps2-alpha6
-
-**Direct PS2 Alpha 6 APK**  
-https://github.com/mauricio-gamedev/OmniCore/releases/download/v0.11.5-ps2-alpha6/OmniCore-v0.11.5-ps2-alpha6.apk
-
-**N64 Alpha 24 release**  
-https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.10.23-n64-alpha24
-
-**Stable PS1 DEV**  
-https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.9.4-dev
-
-### Public information automation
-
-Public release status is mirrored in `config/public-status.json`. Documentation-only public-status updates use `[skip ci]` to avoid unnecessary build loops.
-<!-- OMNICORE_PUBLIC_STATUS_END -->
 
 ## Runtime isolation
 
@@ -134,7 +155,7 @@ The N64 maintenance channel preserves:
 | PlayStation 1 | PCSX-ReARMed / libretro | **Functional / device validated** |
 | Nintendo 64 | Mupen64Plus-Next / libretro | **Alpha 24 / maintenance** |
 | PlayStation 2 | PCSX2/ARMSX2 behind OmniCore `PS2Backend` | **0.11.5 Alpha 6 / active device testing** |
-| PSP | PPSSPP v1.20.4 / libretro | **0.12.0 Alpha 1 preview; ROM import fix pending CI/device validation** |
+| PSP | PPSSPP v1.20.4 / libretro | **0.12.0 Alpha 1 published known-issue preview; graphics/settings candidate in validation** |
 | Wii / GameCube | Dolphin | Planned |
 | Nintendo Switch | Experimental backend evaluation | Long-term |
 
@@ -156,7 +177,7 @@ Mupen64Plus-Next pin: `f275caf4b2bfa1e6d1c51636746ea793f3d80320`
 
 PCSX2/ARMSX2 PS2 pin: `7f0ae7a6c689b5b36eccc61b7adb480f65c7a3a3`
 
-PPSSPP PSP pin: `fa50bb1976065c4f8b1b47af227d367fe9771555` (Alpha 1 preview; import correction pending validation)
+PPSSPP PSP pin: `fa50bb1976065c4f8b1b47af227d367fe9771555` (published Alpha 1 preview; image/settings candidate needs device validation; Vulkan not implemented)
 
 Corresponding source/license material is kept with applicable builds and repository notices.
 
@@ -176,8 +197,9 @@ Third-party components remain governed by their own licenses. PCSX-ReARMed, Mupe
 
 ## Immediate development priorities
 
-1. Complete the PSP ROM-import fix CI run, then validate file selection, folder scanning, launch, touch input and audio on a real device.
-2. Preserve the isolated PS1/N64/PS2 baselines while the PSP backend is integrated.
+1. Complete CI for the PSP graphics/touch-settings candidate, then validate image aspect/depth, launch/restart, import, audio and controls on a real device.
+2. Implement a real PSP Vulkan backend separately after the OpenGL ES path is stable and regression-covered.
+3. Preserve the isolated PS1/N64/PS2 baselines while the PSP backend is integrated.
 3. Complete physical-device testing of the PS2 Alpha 6 PCSX2/ARMSX2 build.
 4. Capture Visibility v1 telemetry in a repeatable heavy gameplay scene.
 5. Measure CULL, FOG, ALPHA, GS and synchronization behavior before enabling additional draw rejection, preserving visual correctness and the 1.0× quality floor.
