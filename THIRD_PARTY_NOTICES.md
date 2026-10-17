@@ -26,6 +26,19 @@ OmniCore uses Mupen64Plus-Next as the Nintendo 64 backend.
 
 The Android N64 workflow fetches that exact revision, applies only the OmniCore Android packaging/build adjustments required for core coexistence and 16 KB ELF alignment, builds the ARM64 and ARMv7 shared libraries, and publishes the corresponding source archive beside applicable APKs.
 
+## PPSSPP — PlayStation Portable Alpha 1 backend
+
+OmniCore PSP Alpha 1 uses PPSSPP through its upstream libretro core, isolated behind the PSP-only native runtime and Android process.
+
+- Project: PPSSPP
+- Upstream: https://github.com/hrydgard/ppsspp
+- Pinned release: v1.20.4
+- Pinned commit: fa50bb1976065c4f8b1b47af227d367fe9771555
+- Upstream license: GNU GPL version 2 or later, as declared in LICENSE.TXT
+- Local license text: third_party/licenses/PPSSPP-LICENSE.TXT
+
+The PSP workflow builds both Android ABIs from the exact upstream revision and publishes a source archive including initialized upstream submodules beside the APK artifact. PPSSPP assets are taken from the same pinned source snapshot. No commercial PSP games or user firmware dumps are bundled.
+
 ## PCSX2 via ARMSX2 — current PS2 Alpha 6 backend
 
 OmniCore PS2 Alpha 6 uses the Android ARM64 PCSX2 emucore maintained by the ARMSX2 project behind OmniCore's `PS2Backend` boundary. The ARMSX2 application UI is not embedded; OmniCore supplies its own library, controls, lifecycle and console-isolation layer while using the pinned native emucore and required runtime resources.

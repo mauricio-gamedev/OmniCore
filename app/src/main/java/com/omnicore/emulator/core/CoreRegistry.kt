@@ -4,6 +4,7 @@ import android.content.Context
 import com.omnicore.emulator.core.n64.N64Core
 import com.omnicore.emulator.core.ps1.Ps1Core
 import com.omnicore.emulator.core.ps2.PS2Core
+import com.omnicore.emulator.core.psp.PSPCore
 import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 
@@ -22,6 +23,7 @@ object CoreRegistry {
             ConsoleSystem.PLAYSTATION_1 -> Ps1Core()
             ConsoleSystem.NINTENDO_64 -> N64Core()
             ConsoleSystem.PLAYSTATION_2 -> PS2Core()
+            ConsoleSystem.PSP -> PSPCore()
             else -> PlannedCore(
                 CoreInfo(
                     id = "${system.shortName.lowercase()}-core",

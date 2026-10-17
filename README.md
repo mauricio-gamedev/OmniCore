@@ -6,6 +6,7 @@
 [![Stable DEV](https://img.shields.io/badge/stable%20DEV-0.9.4-57D8FF)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.9.4-dev)
 [![N64 Alpha](https://img.shields.io/badge/N64%20alpha-0.10.23%20Alpha%2024-9879FF)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.10.23-n64-alpha24)
 [![PS2 Alpha](https://img.shields.io/badge/PS2%20alpha-0.11.4%20Alpha%205-FF6A5F)](https://github.com/mauricio-gamedev/OmniCore/releases/tag/v0.11.4-ps2-alpha5)
+[![PSP Preview](https://img.shields.io/badge/PSP-preview%20fix-pending%20CI-F6C85F)](https://github.com/mauricio-gamedev/OmniCore/pull/1)
 [![Native](https://img.shields.io/badge/native-16%20KB%20ready-3DDC84)](app/src/main/cpp/)
 [![Copyright](https://img.shields.io/badge/copyright-%C2%A9%202026%20%40mauricio--gamedev-6C63FF)](COPYRIGHT.md)
 
@@ -19,6 +20,7 @@ OmniCore is a **multi-system Android emulation hub**. Each console owns its runt
 | Stable DEV | **0.9.4** | PS1 gameplay, video, audio and controls device validated |
 | N64 maintenance | **0.10.23 Alpha 24** | Gameplay baseline protected; startup-only audio polish remains non-blocking |
 | PS2 device-test | **0.11.4 Alpha 5** | Corrective build published and CI validated; physical-device retest in progress |
+| PSP corrective candidate | **0.12.0 Alpha 1 preview** | Off-screen framebuffer + aspect-preserving presentation and conservative startup profile implemented; CI/device checks pending |
 
 ### Latest milestone — PS2 Alpha 5 corrective build
 
@@ -53,6 +55,14 @@ This corrective build **does not lower the selected PS2 internal resolution, ena
 Optimization is part of the PS2 architecture, not a late-stage add-on. SmartPerf uses measured information only when the backend exposes it, and unknown timing fields remain unknown instead of being guessed.
 
 Alpha 5 keeps the **1.0× minimum quality floor**, keeps cycle skipping disabled, and no longer changes the per-game renderer automatically on a later boot. Renderer changes remain explicit/user-controlled until a safer compatibility-aware policy is proven on hardware.
+
+### PSP Alpha 1 corrective candidate — image presentation + smart profile
+
+The first PSP preview booted games but rendered the frame as a small image near the lower-left corner. The PSP-owned native host now allocates a hardware framebuffer for PPSSPP and presents it through a lightweight GLES shader, centered and scaled to fit the available viewport while preserving the 480×272 aspect ratio. It does not crop or stretch the game image.
+
+The launch profile is conservative: native 1× internal resolution on low-memory/thermally pressured devices, 2× only when total/available RAM and thermal state leave sufficient headroom. Frame skipping stays disabled, and quality-reducing options such as crop-to-16:9, skipped buffer effects and skipped GPU readbacks are disabled. These changes are implemented in code but the new build and on-device image/depth behavior still require validation; FPS gains are not claimed yet.
+
+The PSP runtime remains isolated in process `:psp`. PS1, N64 and PS2 implementations are not being refactored. See [PSP corrective candidate notes](docs/PSP_ALPHA1.md) and [PR #1](https://github.com/mauricio-gamedev/OmniCore/pull/1).
 
 ### Downloads
 
@@ -112,7 +122,7 @@ The N64 maintenance channel preserves:
 | PlayStation 1 | PCSX-ReARMed / libretro | **Functional / device validated** |
 | Nintendo 64 | Mupen64Plus-Next / libretro | **Alpha 24 / maintenance** |
 | PlayStation 2 | Play! behind OmniCore `PS2Backend` | **0.11.4 Alpha 5 / active device testing** |
-| PSP | PPSSPP | Planned |
+| PSP | PPSSPP v1.20.4 / libretro | **Alpha 1 corrective candidate / CI and device validation pending** |
 | Wii / GameCube | Dolphin | Planned |
 | Nintendo Switch | Experimental backend evaluation | Long-term |
 
@@ -151,11 +161,12 @@ Third-party components remain governed by their own licenses. PCSX-ReARMed, Mupe
 
 ## Immediate development priorities
 
-1. Complete physical-device retest of the corrected PS2 Alpha 5 build.
-2. Verify repeated game launch after sustained slow-motion no longer produces a black screen.
-3. Measure remaining PS2 stutter/slow-motion without lowering the requested internal resolution.
-4. Verify hub tab/scroll fluidity after removing continuous background animation.
-5. Keep PS1/N64 protected while applying only evidence-driven PS2 corrections.
+1. Complete CI and physical-device validation of the PSP framebuffer/presentation correction; verify depth, aspect ratio and the startup profile.
+2. Complete physical-device retest of the corrected PS2 Alpha 5 build.
+3. Verify repeated game launch after sustained slow-motion no longer produces a black screen.
+4. Measure remaining PS2 stutter/slow-motion without lowering the requested internal resolution.
+5. Verify hub tab/scroll fluidity after removing continuous background animation.
+6. Keep PS1/N64 protected while applying only evidence-driven PS2 corrections.
 
 ---
 

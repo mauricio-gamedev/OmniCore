@@ -8,6 +8,7 @@ import com.omnicore.emulator.model.ConsoleSystem
 import com.omnicore.emulator.model.GameEntry
 import com.omnicore.emulator.storage.Ps1MediaLayout
 import com.omnicore.emulator.storage.Ps1PlaylistMedia
+import com.omnicore.emulator.storage.PSPFolderScanner
 import com.omnicore.emulator.storage.SafGameSource
 import java.util.UUID
 
@@ -61,7 +62,14 @@ object LibraryImportEngine {
         treeUri: Uri,
         preferredSystem: ConsoleSystem? = null
     ): Report {
-        val docs = SafGameSource.listDirectChildren(context, treeUri).filterNot { it.isDirectory }
+        // PSP libraries are often arranged in nested per-game folders. Keep the
+        // legacy direct-child scanner unchanged for PS1/N64/PS2, whose media
+        // grouping and relative-path handling depend on the selected folder layout.
+        val docs = (if (preferredSystem == ConsoleSystem.PSP) {
+            PSPFolderScanner.listRecursively(context, treeUri)
+        } else {
+            SafGameSource.listDirectChildren(context, treeUri)
+        }).filterNot { it.isDirectory }
         return classify(
             context = context,
             docs = docs,
@@ -181,9 +189,19 @@ object LibraryImportEngine {
                 return@forEach
             }
 
-            // .iso is shared by several consoles. Only classify it as PS2 when
-            // ISO9660 SYSTEM.CNF explicitly contains BOOT2. This keeps PS1/PSP/
-            // Wii images from being routed to PCSX2 by extension alone.
+            // An explicit PSP target must win for shared ISO/CSO/PBP suffixes.
+            // Keep PS1/N64/PS2 classification order and legacy media handling intact.
+            if (
+                preferredSystem == ConsoleSystem.PSP &&
+                ConsoleSystem.PSP in RomDetector.candidates(doc.name)
+            ) {
+                games += entry(doc, ConsoleSystem.PSP, folderUri = null)
+                consumed += doc.uri.toString()
+                return@forEach
+            }
+
+            // .iso is shared by several consoles. Without an explicit import
+            // target, only classify it as PS2 when SYSTEM.CNF explicitly has BOOT2.
             if (doc.extension == "iso" && PS2IsoValidator.isPlayStation2Iso(context, doc.uri, doc.name)) {
                 games += entry(doc, ConsoleSystem.PLAYSTATION_2, folderUri = null)
                 consumed += doc.uri.toString()
@@ -221,7 +239,11 @@ object LibraryImportEngine {
 
         val skipped = (docs.size - consumed.size).coerceAtLeast(0)
         if (games.isEmpty() && warnings.isEmpty()) {
-            warnings += "A pasta não contém ROMs reconhecidas pelos sistemas atuais do OmniCore."
+            warnings += if (docs.any { it.extension in AMBIGUOUS_DISC_EXTENSIONS }) {
+                "Há ISO/CSO/PBP, mas o formato não identifica o console sozinho. Escolha PSP (ou o console correto) em “Importar como” e tente novamente."
+            } else {
+                "A pasta não contém ROMs reconhecidas pelos sistemas atuais do OmniCore. Para jogos em subpastas, escolha PSP em “Importar como” para ativar a busca recursiva."
+            }
         }
         return Report(games.distinctBy { it.uri }, docs.size, skipped, warnings.distinct())
     }
@@ -242,6 +264,8 @@ object LibraryImportEngine {
 
     private fun cleanTitle(name: String): String =
         name.substringBeforeLast('.', name).replace('_', ' ').trim().ifBlank { name }
+
+    private val AMBIGUOUS_DISC_EXTENSIONS = setOf("iso", "cso", "pbp")
 
     private val EXPLICIT_SYSTEM_EXTENSIONS = setOf("bin", "chd", "cso")
 
