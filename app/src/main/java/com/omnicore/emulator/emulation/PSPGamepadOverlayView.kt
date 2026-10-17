@@ -9,6 +9,7 @@ import android.util.SparseIntArray
 import android.view.MotionEvent
 import android.view.View
 import com.omnicore.emulator.core.psp.PSPNativeBridge
+import com.omnicore.emulator.settings.PSPSettings
 import kotlin.math.min
 
 /** Lightweight PSP-specific multitouch layout; ids match upstream PPSSPP libretro mapping. */
@@ -67,6 +68,9 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
     private var analogX = 0f
     private var analogY = 0f
     private var analogPointerId = INVALID_POINTER
+    private var controlOpacity = PSPSettings.controlOpacity(context)
+    private var controlSize = PSPSettings.controlSize(context) / 100f
+    private var smartOpacity = PSPSettings.smartOpacity(context)
 
     init {
         isClickable = true
@@ -81,11 +85,11 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
         val short = min(w, h).toFloat().coerceAtLeast(1f)
         analogCenterX = w * 0.205f
         analogCenterY = h * 0.795f
-        analogRadius = short * 0.112f
+        analogRadius = short * 0.112f * controlSize
         buttons.forEach { button ->
             button.x = w * button.nx
             button.y = h * button.ny
-            button.radius = short * button.factor
+            button.radius = short * button.factor * controlSize
         }
     }
 
@@ -93,7 +97,8 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
         super.onDraw(canvas)
         val active = SystemClock.uptimeMillis() <= activeUntilMs ||
             analogPointerId != INVALID_POINTER || pointerButtons.size() > 0
-        val alpha = if (active) 168 else 112
+        val configured = (controlOpacity * 2.55f).toInt().coerceIn(20, 255)
+        val alpha = if (smartOpacity && !active) (configured * 0.62f).toInt() else configured
         drawAnalog(canvas, alpha)
         buttons.forEach { drawButton(canvas, it, alpha) }
     }
@@ -177,6 +182,14 @@ class PSPGamepadOverlayView(context: Context) : View(context) {
             }
         }
         return true
+    }
+
+    fun applyControlSettings(opacity: Int, sizePercent: Int, intelligentOpacity: Boolean) {
+        controlOpacity = opacity.coerceIn(20, 100)
+        controlSize = sizePercent.coerceIn(70, 140) / 100f
+        smartOpacity = intelligentOpacity
+        onSizeChanged(width, height, width, height)
+        invalidate()
     }
 
     private fun within(x: Float, y: Float, centerX: Float, centerY: Float, radius: Float): Boolean {
