@@ -122,7 +122,7 @@ Physical-device validation of this newest Alpha 6 build is **still pending**; ru
 - **PS1** remains on its validated PCSX-ReARMed path.
 - **N64** runs in `com.omnicore.emulator:n64` and keeps the protected Alpha 24 gameplay baseline.
 - **PS2** runs in `com.omnicore.emulator:ps2` on the pinned PCSX2/ARMSX2 foundation, with its own backend, lifecycle, settings and performance path.
-- **PSP** is being added in the experimental `com.omnicore.emulator:psp` process through pinned PPSSPP v1.20.4; the first public preview has a known import issue, with a fix being validated separately.
+- **PSP** is in experimental preview through pinned PPSSPP v1.20.4 in `com.omnicore.emulator:psp`; the published Alpha 1 APK has known image-presentation and library-import issues, while a PSP-only graphics/touch-settings candidate is in CI and still needs physical-device validation.
 
 PS2 CI rejects accidental changes to protected PS1/N64 runtime-owned source paths.
 
