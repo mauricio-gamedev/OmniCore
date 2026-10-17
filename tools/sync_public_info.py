@@ -68,6 +68,18 @@ def render(data: dict) -> str:
         "",
         f"**OmniCore {latest['version']}** — {latest['summary']}",
         "",
+        *(
+            [
+                f"### Next PSP update — {data['next_update']['title']}",
+                "",
+                f"**Status:** {data['next_update']['status']}",
+                "",
+                data['next_update']['summary'],
+                "",
+            ]
+            if data.get("next_update")
+            else []
+        ),
         "### Downloads",
         "",
         *downloads,
